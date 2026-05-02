@@ -1,6 +1,7 @@
 package com.sqzj.vw50;
 
 import com.sqzj.vw50.common.registry.VWCreativeModeTabs;
+import com.sqzj.vw50.common.registry.VWDataComponents;
 import com.sqzj.vw50.common.registry.VWItems;
 import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.IEventBus;
@@ -16,6 +17,7 @@ public class VW50 {
     public VW50(IEventBus modEventBus) {
         VWCreativeModeTabs.TABS.register(modEventBus);
         VWItems.ITEMS.register(modEventBus);
+        VWDataComponents.DATA_COMPONENT_TYPE.register(modEventBus);
     }
 
     public static Identifier prefix(String name) {
