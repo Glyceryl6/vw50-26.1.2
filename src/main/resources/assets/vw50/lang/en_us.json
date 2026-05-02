@@ -1,0 +1,13 @@
+{
+  "itemGroup.vw50": "Example Mod Tab",
+  "block.vw50.example_block": "Example Block",
+  "item.vw50.example_item": "Example Item",
+
+  "vw50.configuration.title": "VW50 Configs",
+  "vw50.configuration.section.vw50.common.toml": "VW50 Configs",
+  "vw50.configuration.section.vw50.common.toml.title": "VW50 Configs",
+  "vw50.configuration.items": "Item List",
+  "vw50.configuration.logDirtBlock": "Log Dirt Block",
+  "vw50.configuration.magicNumberIntroduction": "Magic Number Text",
+  "vw50.configuration.magicNumber": "Magic Number"
+}
