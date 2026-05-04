@@ -12,7 +12,6 @@ import net.minecraft.client.gui.components.WidgetSprites;
 import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
 import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.network.chat.MessageSignature;
 import net.minecraft.resources.Identifier;
 
 import java.util.List;
@@ -22,7 +21,6 @@ public class MixinHandler {
     public static final WidgetSprites PLUS_ONE_SPRITES = new WidgetSprites(
             VW50.prefix("plus_one_default"), VW50.prefix("plus_one"));
     public static ChatComponent.ChatGraphicsAccess chatGraphicsAccess = null;
-    public static MessageSignature signature = null;
 
     public static void extractRenderState$accept_Hook(ChatComponent chat, GuiMessage.Line line, int textTop) {
         if (chatGraphicsAccess instanceof ChatComponent.DrawingFocusedGraphicsAccess access) {
