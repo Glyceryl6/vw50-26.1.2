@@ -1,7 +1,6 @@
 package com.sqzj.vw50.mixin;
 
 import com.sqzj.vw50.api.IChatComponentExtensions;
-import com.sqzj.vw50.utils.MixinHandler;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
@@ -25,7 +24,7 @@ public class MixinChatScreen extends Screen {
         if (chat instanceof IChatComponentExtensions extensions) {
             if (extensions.VW50$isMouseOverRepeatButton()) {
                 Component markedMessage = extensions.VW50$getMarkedMessage();
-                chat.addPlayerMessage(markedMessage, MixinHandler.signature, null);
+                chat.addPlayerMessage(markedMessage, null, null);
                 cir.setReturnValue(true);
             }
         }
