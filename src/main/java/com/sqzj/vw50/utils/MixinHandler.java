@@ -13,6 +13,7 @@ import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.network.chat.MessageSignature;
+import net.minecraft.resources.Identifier;
 
 import java.util.List;
 
@@ -34,9 +35,9 @@ public class MixinHandler {
             int textBottom = textTop + messageHeight;
             if (GuiMessageAttachment.get(line.parent()) != null && line.endOfEntry()) {
                 boolean isMouseOver = access.isMouseOver(iconLeft, top, right, textBottom);
+                Identifier location = PLUS_ONE_SPRITES.get(true, isMouseOver);
                 if (chat instanceof IChatComponentExtensions extensions) {
-                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED,
-                            PLUS_ONE_SPRITES.get(true, isMouseOver), iconLeft, top, iconSize, iconSize);
+                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED, location, iconLeft, top, iconSize, iconSize);
                     graphics.requestCursor(isMouseOver ? CursorTypes.POINTING_HAND : CursorType.DEFAULT);
                     extensions.VW50$setMouseOverRepeatButton(isMouseOver);
                 }
