@@ -18,7 +18,7 @@ public class VWRecipeProvider extends RecipeProvider {
 
     @Override
     protected void buildRecipes() {
-        this.shapeless(RecipeCategory.MISC, VWItems.EMPTY_RED_PACKET.get())
+        this.shapeless(RecipeCategory.MISC, VWItems.EMPTY_RED_PACKET.get(), 4)
                 .requires(Items.PAPER, 2).requires(Items.RED_DYE)
                 .unlockedBy(getHasName(Items.PAPER), this.has(Items.PAPER))
                 .save(this.output);
