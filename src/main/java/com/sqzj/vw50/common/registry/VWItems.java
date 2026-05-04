@@ -1,7 +1,7 @@
 package com.sqzj.vw50.common.registry;
 
 import com.sqzj.vw50.VW50;
-import com.sqzj.vw50.common.items.EmptyRedPacket;
+import com.sqzj.vw50.common.items.EmptyRedEnvelope;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.Item;
@@ -14,7 +14,7 @@ import java.util.function.Supplier;
 public class VWItems {
 
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(VW50.MOD_ID);
-    public static final DeferredHolder<Item, ? extends Item> EMPTY_RED_PACKET = register("empty_red_envelope", EmptyRedPacket::new);
+    public static final DeferredHolder<Item, ? extends Item> EMPTY_RED_PACKET = register("empty_red_envelope", EmptyRedEnvelope::new);
 
     public static DeferredHolder<Item, ? extends Item> register(
             String name, Function<Item.Properties, Item> itemFactory) {
