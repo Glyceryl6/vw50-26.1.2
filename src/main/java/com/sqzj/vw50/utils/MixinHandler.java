@@ -18,8 +18,8 @@ import java.util.List;
 
 public class MixinHandler {
 
-    public static final WidgetSprites REPEAT_SPRITES = new WidgetSprites(
-            VW50.prefix("repeat"), VW50.prefix("repeat_highlighted"));
+    public static final WidgetSprites PLUS_ONE_SPRITES = new WidgetSprites(
+            VW50.prefix("plus_one_default"), VW50.prefix("plus_one"));
     public static ChatComponent.ChatGraphicsAccess chatGraphicsAccess = null;
     public static MessageSignature signature = null;
 
@@ -27,17 +27,16 @@ public class MixinHandler {
         if (chatGraphicsAccess instanceof ChatComponent.DrawingFocusedGraphicsAccess access) {
             Minecraft minecraft = Minecraft.getInstance();
             GuiGraphicsExtractor graphics = access.graphics;
-            final int messageHeight = 9, iconSize = 10;
+            final int messageHeight = 9, iconSize = 9;
             int iconLeft = line.getTagIconLeft(minecraft.font);
             int top = textTop + messageHeight - iconSize;
             int right = iconLeft + iconSize;
             int textBottom = textTop + messageHeight;
-            boolean isMouseOver = access.isMouseOver(iconLeft, top, right, textBottom);
-            if (GuiMessageAttachment.get(line.parent()) != null) {
-                graphics.blitSprite(RenderPipelines.GUI_TEXTURED,
-                        VW50.prefix("plus_one"),
-                        iconLeft, top, iconSize, iconSize);
+            if (GuiMessageAttachment.get(line.parent()) != null && line.endOfEntry()) {
+                boolean isMouseOver = access.isMouseOver(iconLeft, top, right, textBottom);
                 if (chat instanceof IChatComponentExtensions extensions) {
+                    graphics.blitSprite(RenderPipelines.GUI_TEXTURED,
+                            PLUS_ONE_SPRITES.get(true, isMouseOver), iconLeft, top, iconSize, iconSize);
                     graphics.requestCursor(isMouseOver ? CursorTypes.POINTING_HAND : CursorType.DEFAULT);
                     extensions.VW50$setMouseOverRepeatButton(isMouseOver);
                 }
