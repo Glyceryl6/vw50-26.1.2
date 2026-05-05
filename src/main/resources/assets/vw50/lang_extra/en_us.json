@@ -1,4 +1,17 @@
 {
     "itemGroup.vw50": "V Me 50",
-    "item.vw50.empty_red_envelope.tooltips": "Boss is generous!"
+    "item.vw50.empty_red_envelope.tooltips": "Boss is generous!",
+    "red_envelope.default_title": "Kung Hei Fat Choy",
+    "red_envelope.too_many_players": "Too many players",
+    "red_envelope.player_more_than_items": "The number of players exceeds the total number of items",
+    "red_envelope.lucky_money": "Lucky Money",
+    "red_envelope.destroy_on_expired": "Destroy on expired",
+    "red_envelope.send": "Send",
+    "red_envelope.hint.title": "Please enter a title",
+    "red_envelope.hint.number": "Number of People",
+    "red_envelope.hint.name": "Exclusive Player",
+    "red_envelope.hint.password": "Password",
+    "red_envelope.property.normal": "Normal",
+    "red_envelope.property.exclusive": "Exclusive",
+    "red_envelope.property.password": "Password"
 }

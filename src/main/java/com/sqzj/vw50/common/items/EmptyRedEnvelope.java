@@ -1,7 +1,9 @@
 package com.sqzj.vw50.common.items;
 
+import com.sqzj.vw50.client.menu.SendRedEnvelopeMenuProvider;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -11,6 +13,7 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.level.Level;
 
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /** @noinspection deprecation*/
@@ -22,7 +25,13 @@ public class EmptyRedEnvelope extends Item {
 
     @Override
     public InteractionResult use(Level level, Player player, InteractionHand hand) {
-        return super.use(level, player, hand);
+        if (player instanceof ServerPlayer serverPlayer && !level.isClientSide()) {
+            UUID uuid = serverPlayer.getUUID();
+            SendRedEnvelopeMenuProvider provider = new SendRedEnvelopeMenuProvider(uuid);
+            serverPlayer.openMenu(provider, byteBuf -> byteBuf.writeUUID(uuid));
+        }
+        
+        return InteractionResult.SUCCESS;
     }
 
     @Override

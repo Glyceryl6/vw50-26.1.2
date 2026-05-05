@@ -10,7 +10,6 @@ import net.minecraft.data.PackOutput;
 import net.minecraft.resources.ResourceKey;
 import net.neoforged.neoforge.common.data.LanguageProvider;
 import net.neoforged.neoforge.registries.DeferredHolder;
-import org.jetbrains.annotations.NotNull;
 
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -39,7 +38,7 @@ public class VWLanguageProvider extends LanguageProvider {
     }
 
     @Override
-    public @NotNull CompletableFuture<?> run(CachedOutput cache) {
+    public CompletableFuture<?> run(CachedOutput cache) {
         this.addTranslations();
         if (this.locale.equals("en_us") && !this.enData.isEmpty()) {
             return this.save(cache, this.enData);

@@ -2,9 +2,8 @@
     "required": true,
     "package": "com.sqzj.vw50.mixin",
     "compatibilityLevel": "JAVA_25",
+    "refmap": "vw50.refmap.json",
     "mixins": [
-        "MixinChatComponent",
-        "MixinChatComponentInner"
     ],
     "injectors": {
         "defaultRequire": 1
@@ -13,6 +12,8 @@
         "requireAnnotations": true
     },
     "client": [
+        "MixinChatComponentInner",
+        "MixinChatComponent",
         "MixinChatScreen"
     ]
 }
