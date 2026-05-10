@@ -8,6 +8,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.NonNullList;
 import net.minecraft.network.chat.Component;
@@ -15,10 +16,10 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
+import org.apache.commons.lang3.StringUtils;
 import org.jspecify.annotations.NonNull;
 
 import java.util.List;
-import java.util.regex.Pattern;
 
 public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelopeMenu> {
 
@@ -66,12 +67,12 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         this.nameBox = new EditBox(this.font, x + 105, y + 51, 61, 15, Component.empty());
         this.titleBox.setHint(Component.translatable("red_envelope.hint.title"));
         this.titleBox.setMaxLength(20);
+        this.numberBox.setValue("0");
         this.numberBox.setHint(Component.translatable("red_envelope.hint.number"));
-        this.numberBox.setFilter(value -> Pattern.matches("\\d", value));
+        this.numberBox.setFilter(value -> value.matches("\\d+"));
+        this.numberBox.setResponder(this::updateSendButtonState);
         this.nameBox.setFilter(value -> !value.startsWith("/"));
         this.nameBox.setMaxLength(30);
-//        this.numberBox.setResponder(_ -> this.updateSendButtonState());
-//        this.nameBox.setResponder(_ -> this.updateSendButtonState());
         this.sendButton = new ImageButton(x + 109, y + 74, 50, 18, SEND_BUTTON_SPRITES, _ -> this.sendRedEnvelope());
         this.addRenderableWidget(new UniversalCheckbox(x + 57, y + 33, 16, 16, sprites, true, (_, value) -> this.isLuckyMoney = value));
         this.addRenderableWidget(new UniversalCheckbox(x + 57, y + 51, 16, sprites, (_, value) -> this.destroyOnExpired = value));
@@ -112,9 +113,17 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
     }
 
     @Override
+    public boolean keyPressed(KeyEvent event) {
+        if (this.titleBox.keyPressed(event) || this.numberBox.keyPressed(event)) {
+            return true;
+        } else {
+            return !event.isEscape() && (this.titleBox.isFocused() || this.numberBox.isFocused()) || super.keyPressed(event);
+        }
+    }
+
+    @Override
     protected void containerTick() {
         this.updateUIForType();
-        this.updateSendButtonState();
     }
 
     private void updateUIForType() {
@@ -137,9 +146,20 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         }
     }
 
-    private void updateSendButtonState() {
-        String number = this.numberBox.getValue();
-        String name = this.nameBox.getValue();
+    private void updateSendButtonState(String number) {
+        if (number.isEmpty()) {
+            this.numberBox.setValue("0");
+            return;
+        }
+
+        if (number.matches("\\d+")) {
+            String trimmed = number.replaceFirst("^0+(?!$)", StringUtils.EMPTY);
+            if (!trimmed.equals(number)) {
+                this.numberBox.setValue(trimmed);
+                this.numberBox.setCursorPosition(trimmed.length());
+            }
+        }
+
         NonNullList<ItemStack> stacks = this.menu.giftSlot.copyToList();
         if (stacks.isEmpty()) {
             this.sendButton.active = false;
@@ -156,26 +176,26 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
                 this.playerMoreThanItems = false;
             }
         }
-        
+
         if (Integer.parseInt(number) > 256) {
             this.numberBox.setTextColor(-40864);
             this.playerTooMany = true;
-            return;
         } else {
             this.numberBox.setTextColor(-1);
             this.playerTooMany = false;
-        }
-
-        switch (this.property) {
-            case NORMAL -> this.sendButton.active = !number.isEmpty();
-            case EXCLUSIVE -> this.sendButton.active = !name.isEmpty();
-            case PASSWORD -> this.sendButton.active = !number.isEmpty() && !name.isEmpty();
         }
     }
 
     private void updateProperty(Property property) {
         List.of(this.numberBox, this.nameBox).forEach(editBox -> editBox.setValue(""));
         this.property = property;
+        String number = this.numberBox.getValue();
+        String name = this.nameBox.getValue();
+        switch (property) {
+            case NORMAL -> this.sendButton.active = !number.isEmpty();
+            case EXCLUSIVE -> this.sendButton.active = !name.isEmpty();
+            case PASSWORD -> this.sendButton.active = !number.isEmpty() && !name.isEmpty();
+        }
     }
 
     private void sendRedEnvelope() {
