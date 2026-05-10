@@ -1,6 +1,5 @@
 package com.sqzj.vw50.misc.misc;
 
-import net.minecraft.core.NonNullList;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.transfer.StacksResourceHandler;
 import net.neoforged.neoforge.transfer.item.ItemResource;
@@ -9,10 +8,6 @@ public class VWItemStacksResourceHandler extends StacksResourceHandler<ItemStack
 
     public VWItemStacksResourceHandler(int size) {
         super(size, ItemStack.EMPTY, VWItemStackCodecs.OPTIONAL_CODEC);
-    }
-
-    public VWItemStacksResourceHandler(NonNullList<ItemStack> stacks) {
-        super(stacks, ItemStack.EMPTY, VWItemStackCodecs.OPTIONAL_CODEC);
     }
 
     @Override

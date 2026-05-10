@@ -1,7 +1,7 @@
 package com.sqzj.vw50.mixin;
 
 import com.llamalad7.mixinextras.sugar.Local;
-import com.sqzj.vw50.utils.MixinHandler;
+import com.sqzj.vw50.misc.hook.HookChatComponent;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.multiplayer.chat.GuiMessage;
 import org.spongepowered.asm.mixin.Final;
@@ -18,7 +18,7 @@ public class MixinChatComponentInner {
 
     @Inject(method = "accept", at = @At(value = "TAIL"))
     private void accept(GuiMessage.Line line, int lineIndex, float alpha, CallbackInfo ci, @Local(name = "textTop") int textTop) {
-        MixinHandler.extractRenderState$accept_Hook(this.this$0, line, textTop);
+        HookChatComponent.extractRenderState$accept_Hook(this.this$0, line, textTop);
     }
 
 }

@@ -3,7 +3,7 @@ package com.sqzj.vw50.mixin;
 import com.llamalad7.mixinextras.sugar.Local;
 import com.sqzj.vw50.api.IChatComponentExtensions;
 import com.sqzj.vw50.misc.GuiMessageAttachment;
-import com.sqzj.vw50.utils.MixinHandler;
+import com.sqzj.vw50.misc.hook.HookChatComponent;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.client.multiplayer.chat.GuiMessageSource;
@@ -29,7 +29,7 @@ public class MixinChatComponent implements IChatComponentExtensions {
 
     @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/components/ChatComponent$ChatGraphicsAccess;IILnet/minecraft/client/gui/components/ChatComponent$DisplayMode;)V", at = @At(value = "HEAD"))
     private void extractRenderState(ChatComponent.ChatGraphicsAccess graphics, int screenHeight, int ticks, ChatComponent.DisplayMode displayMode, CallbackInfo ci) {
-        MixinHandler.chatGraphicsAccess = graphics;
+        HookChatComponent.chatGraphicsAccess = graphics;
     }
 
     @Inject(method = "clearMessages", at = @At(value = "HEAD"))
@@ -40,7 +40,7 @@ public class MixinChatComponent implements IChatComponentExtensions {
     @Inject(method = "addMessage", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/components/ChatComponent;logChatMessage(Lnet/minecraft/client/multiplayer/chat/GuiMessage;)V", shift = At.Shift.AFTER))
     private void addMessage(Component contents, MessageSignature signature, GuiMessageSource source, GuiMessageTag tag, CallbackInfo ci, @Local(name = "message") GuiMessage message) {
         if (source == GuiMessageSource.PLAYER) {
-            if (MixinHandler.addMessage_Hook(this.allMessages, message)) {
+            if (HookChatComponent.addMessage_Hook(this.allMessages, message)) {
                 this.VW50$markedMessage = message.content();
             } else {
                 this.VW50$markedMessage = Component.empty();
