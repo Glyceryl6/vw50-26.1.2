@@ -6,13 +6,13 @@ import java.util.WeakHashMap;
 
 public class GuiMessageAttachment {
 
-    private static final WeakHashMap<GuiMessage, Boolean> EXTRA_DATA = new WeakHashMap<>();
+    private static final WeakHashMap<GuiMessage, GuiMessageExtraData> EXTRA_DATA = new WeakHashMap<>();
 
-    public static void put(GuiMessage message, Boolean data) {
+    public static void put(GuiMessage message, GuiMessageExtraData data) {
         EXTRA_DATA.put(message, data);
     }
 
-    public static Boolean get(GuiMessage message) {
+    public static GuiMessageExtraData get(GuiMessage message) {
         return EXTRA_DATA.get(message);
     }
 
@@ -21,7 +21,7 @@ public class GuiMessageAttachment {
     }
 
     public static void clear() {
-        EXTRA_DATA.clear();
+        EXTRA_DATA.forEach((_, extraData) -> extraData.canPlusOne = false);
     }
 
 }

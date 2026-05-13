@@ -4,11 +4,16 @@ import com.mojang.datafixers.util.Pair;
 import com.sqzj.vw50.VW50;
 import com.sqzj.vw50.client.menu.SendRedEnvelopeMenu;
 import com.sqzj.vw50.client.widget.UniversalCheckbox;
+import com.sqzj.vw50.misc.GuiMessageAttachment;
+import com.sqzj.vw50.misc.GuiMessageExtraData;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.multiplayer.chat.GuiMessage;
+import net.minecraft.client.multiplayer.chat.GuiMessageSource;
+import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.NonNullList;
 import net.minecraft.network.chat.Component;
@@ -73,7 +78,7 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         this.numberBox.setResponder(this::updateSendButtonState);
         this.nameBox.setFilter(value -> !value.startsWith("/"));
         this.nameBox.setMaxLength(30);
-        this.sendButton = new ImageButton(x + 109, y + 74, 50, 18, SEND_BUTTON_SPRITES, _ -> this.sendRedEnvelope());
+        this.sendButton = new ImageButton(x + 109, y + 74, 50, 18, SEND_BUTTON_SPRITES, this::sendRedEnvelope);
         this.addRenderableWidget(new UniversalCheckbox(x + 57, y + 33, 16, 16, sprites, true, (_, value) -> this.isLuckyMoney = value));
         this.addRenderableWidget(new UniversalCheckbox(x + 57, y + 51, 16, sprites, (_, value) -> this.destroyOnExpired = value));
         this.addRenderableWidget(CycleButton.builder(Property::getDescription, this.property)
@@ -113,7 +118,7 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
     }
 
     @Override
-    public boolean keyPressed(KeyEvent event) {
+    public boolean keyPressed(@NonNull KeyEvent event) {
         if (this.titleBox.keyPressed(event) || this.numberBox.keyPressed(event)) {
             return true;
         } else {
@@ -198,12 +203,19 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         }
     }
 
-    private void sendRedEnvelope() {
+    private void sendRedEnvelope(Button button) {
         String title = this.titleBox.getValue();
         String number = this.numberBox.getValue();
         String name = this.nameBox.getValue();
-        if (title.isEmpty()) {
-            title = DEFAULT_TITLE.getString();
+        if (title.isEmpty()) title = DEFAULT_TITLE.getString();
+        ChatComponent chat = this.minecraft.gui.getChat();
+        GuiMessage message = new GuiMessage(this.minecraft.gui.getGuiTicks(), Component.literal(title),
+                null, GuiMessageSource.SYSTEM_SERVER, GuiMessageTag.systemSinglePlayer());
+        GuiMessageAttachment.put(message, new GuiMessageExtraData(Boolean.FALSE, Boolean.TRUE));
+        if (chat.visibleMessageFilter.test(message)) {
+            chat.logChatMessage(message);
+            chat.addMessageToDisplayQueue(message);
+            chat.addMessageToQueue(message);
         }
     }
 

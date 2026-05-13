@@ -15,10 +15,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class MixinChatComponentInner {
 
     @Shadow @Final ChatComponent this$0;
+    @Shadow @Final float val$textOpacity;
+    @Shadow @Final int val$chatBottom;
+
+    @Inject(method = "accept", at = @At(value = "HEAD"), cancellable = true)
+    private void accept(GuiMessage.Line line, int lineIndex, float alpha, CallbackInfo ci) {
+        HookChatComponent.extractRenderState$accept_InjectHead(this.this$0, line, lineIndex, alpha, this.val$chatBottom, this.val$textOpacity, ci);
+    }
 
     @Inject(method = "accept", at = @At(value = "TAIL"))
     private void accept(GuiMessage.Line line, int lineIndex, float alpha, CallbackInfo ci, @Local(name = "textTop") int textTop) {
-        HookChatComponent.extractRenderState$accept_Hook(this.this$0, line, textTop);
+        HookChatComponent.extractRenderState$accept_InjectTail(this.this$0, line, textTop);
     }
 
 }

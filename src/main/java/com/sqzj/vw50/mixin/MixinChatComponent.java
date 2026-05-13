@@ -32,6 +32,13 @@ public class MixinChatComponent implements IChatComponentExtensions {
         HookChatComponent.chatGraphicsAccess = graphics;
     }
 
+    @Inject(method = "lambda$extractRenderState$1", at = @At(value = "HEAD"), remap = false, cancellable = true)
+    private static void extractRenderState(
+            int chatBottom, int entryHeight, ChatComponent.ChatGraphicsAccess graphics, int maxWidth,
+            float backgroundOpacity, GuiMessage.Line var5x, int lineIndex, float alphax, CallbackInfo ci) {
+        HookChatComponent.extractRenderState$lambda$1_Inject(chatBottom, graphics, maxWidth, backgroundOpacity, var5x, lineIndex, alphax, ci);
+    }
+
     @Inject(method = "clearMessages", at = @At(value = "HEAD"))
     public void clearMessages(boolean history, CallbackInfo ci) {
         GuiMessageAttachment.clear();
@@ -40,7 +47,7 @@ public class MixinChatComponent implements IChatComponentExtensions {
     @Inject(method = "addMessage", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/components/ChatComponent;logChatMessage(Lnet/minecraft/client/multiplayer/chat/GuiMessage;)V", shift = At.Shift.AFTER))
     private void addMessage(Component contents, MessageSignature signature, GuiMessageSource source, GuiMessageTag tag, CallbackInfo ci, @Local(name = "message") GuiMessage message) {
         if (source == GuiMessageSource.PLAYER) {
-            if (HookChatComponent.addMessage_Hook(this.allMessages, message)) {
+            if (HookChatComponent.addMessage_Inject(this.allMessages, message)) {
                 this.VW50$markedMessage = message.content();
             } else {
                 this.VW50$markedMessage = Component.empty();
