@@ -2,7 +2,6 @@ package com.sqzj.vw50.client.gui;
 
 import com.mojang.datafixers.util.Pair;
 import com.sqzj.vw50.VW50;
-import com.sqzj.vw50.api.IChatComponentExtensions;
 import com.sqzj.vw50.client.menu.SendRedEnvelopeMenu;
 import com.sqzj.vw50.client.widget.UniversalCheckbox;
 import com.sqzj.vw50.misc.GuiMessageAttachment;
@@ -213,11 +212,6 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         GuiMessage message = new GuiMessage(this.minecraft.gui.getGuiTicks(), Component.literal(title),
                 null, GuiMessageSource.SYSTEM_SERVER, GuiMessageTag.systemSinglePlayer());
         GuiMessageAttachment.put(message, new GuiMessageExtraData(Boolean.FALSE, Boolean.TRUE));
-        if (chat instanceof IChatComponentExtensions extensions) {
-            extensions.VW50$setMessageHeight(message, 36);
-            extensions.VW50$setMessageWidth(message, 192);
-        }
-
         if (chat.visibleMessageFilter.test(message)) {
             chat.logChatMessage(message);
             chat.addMessageToDisplayQueue(message);
