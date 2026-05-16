@@ -36,12 +36,33 @@ public class HookChatComponent {
         boolean flag = extraData != null && extraData.isRedEnvelope;
         if (graphics instanceof ChatComponent.DrawingFocusedGraphicsAccess && flag) {
             double chatLineSpacing = Minecraft.getInstance().options.chatLineSpacing().get();
-            int entryHeightN = Mth.floor(9 * (chatLineSpacing + 1.0F)) + 60;
-            int entryBottom = chatBottom - lineIndex * entryHeightN;
-            int entryTop = entryBottom - entryHeightN;
+            int entryHeight = Mth.floor(9 * (chatLineSpacing + 1.0F));
+            int entryBottom = chatBottom - lineIndex * entryHeight;
+            int entryTop = entryBottom - entryHeight;
             int color = ARGB.black(alphax * backgroundOpacity);
             graphics.fill(-4, entryTop, maxWidth + 4 + 4, entryBottom, color);
             ci.cancel();
+        }
+    }
+
+    public static void extractRenderState$forEachLine_InjectAfter(List<GuiMessage> allMessages, int ticks, float textOpacity, int chatBottom, double chatLineSpacing) {
+        if (chatGraphicsAccess instanceof ChatComponent.DrawingBackgroundGraphicsAccess access) {
+            final int entryBottomToMessageY = (int)Math.round(8.0 * (chatLineSpacing + 1.0) - 4.0 * chatLineSpacing);
+            final int entryHeight = (int)((9 + 15) * (chatLineSpacing + 1.0F));
+            final int width = 192 / 2, height = 72 / 2;
+            for (int i = 0; i < allMessages.size(); i++) {
+                int entryBottom = chatBottom - i * entryHeight;
+                int textTop = entryBottom - entryBottomToMessageY;
+                GuiMessage message = allMessages.get(i);
+                GuiMessageExtraData extraData = GuiMessageAttachment.get(message);
+                if (extraData != null && extraData.isRedEnvelope) {
+                    float alpha = AlphaCalculator.timeBased(ticks).calculate(message);
+                    ActiveTextCollector.Parameters parameters = access.parameters.withOpacity(alpha * textOpacity);
+                    access.graphics.blit(RenderPipelines.GUI_TEXTURED, RED_ENV_COMPONENT_LOCATION, 4, textTop - 15,
+                            0.0F, 0.0F, width, height, width, height, ARGB.white(parameters.opacity()));
+                    access.textRenderer.accept(TextAlignment.LEFT, 0, textTop, parameters, message.content());
+                }
+            }
         }
     }
 
@@ -110,6 +131,25 @@ public class HookChatComponent {
         }
 
         return false;
+    }
+
+    @FunctionalInterface
+    public interface AlphaCalculator {
+
+        static AlphaCalculator timeBased(int currentTickTime) {
+            return message -> {
+                int tickDelta = currentTickTime - message.addedTime();
+                double t = tickDelta / 200.0;
+                t = 1.0 - t;
+                t *= 10.0;
+                t = Mth.clamp(t, 0.0, 1.0);
+                t *= t;
+                return (float)t;
+            };
+        }
+
+        float calculate(GuiMessage message);
+
     }
 
 }
