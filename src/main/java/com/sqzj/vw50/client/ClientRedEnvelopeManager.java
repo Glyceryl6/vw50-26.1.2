@@ -2,6 +2,7 @@ package com.sqzj.vw50.client;
 
 import com.sqzj.vw50.misc.GuiMessageAttachment;
 import com.sqzj.vw50.misc.GuiMessageExtraData;
+import com.sqzj.vw50.misc.hook.HookChatComponent;
 import com.sqzj.vw50.server.network.ClaimResultPayload;
 import com.sqzj.vw50.server.network.RedEnvelopeSnapshot;
 import com.sqzj.vw50.server.network.RedEnvelopeSyncPayload;
@@ -14,6 +15,7 @@ import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
+import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -23,11 +25,6 @@ public class ClientRedEnvelopeManager {
 
     private static final Map<UUID, GuiMessage> CHAT_MESSAGES = new HashMap<>();
     private static final Map<UUID, RedEnvelopeSnapshot> SNAPSHOTS = new HashMap<>();
-
-    private static final int RED_ENVELOPE_CARD_WIDTH = 158;
-    private static final int RED_ENVELOPE_INLINE_GAP = 4;
-    private static final String INLINE_PLACEHOLDER = " \n \n ";
-    private static final String WRAPPED_PLACEHOLDER = " \n \n \n ";
 
     public static void handleSync(RedEnvelopeSyncPayload payload, IPayloadContext context) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -47,49 +44,56 @@ public class ClientRedEnvelopeManager {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null) return;
         MutableComponent message = Component.translatable(payload.message(), payload.amount());
-        // Claim feedback should not become a normal chat line; otherwise repeated
-        // clicks push the red-envelope entry away from surrounding chat messages.
         minecraft.player.sendOverlayMessage(message.withStyle(payload.success() ? ChatFormatting.GOLD : ChatFormatting.RED));
     }
 
+    @Nullable
     public static RedEnvelopeSnapshot getSnapshot(UUID id) {
         return SNAPSHOTS.get(id);
     }
 
-    private static Component makeChatContent(RedEnvelopeSnapshot snapshot, boolean wrapped) {
+    private static Component makeChatContent(RedEnvelopeSnapshot snapshot, HookChatComponent.RedEnvelopeLayout layout) {
         String sender = snapshot.senderName().isBlank() ? "Server" : snapshot.senderName();
-        String title = snapshot.title().isBlank() ? "Red Envelope" : snapshot.title();
-        String placeholder = wrapped ? WRAPPED_PLACEHOLDER : INLINE_PLACEHOLDER;
-        // This string is still useful for the vanilla chat log/search, but the
-        // visible red-envelope entry is drawn by HookChatComponent.  The blank
-        // placeholder lines reserve the exact vertical room for the custom card.
-        return Component.literal("<" + sender + "> [" + title + "]\n" + placeholder);
+        String label = Component.translatable("red_envelope.chat.card_title").getString();
+        StringBuilder builder = new StringBuilder();
+        // Keep a short, readable log entry, but reserve the visible height using
+        // controlled blank lines so long titles/passwords do not make vanilla chat
+        // wrap unpredictably before VW50 draws the card.
+        builder.append("<").append(sender).append("> [").append(label).append("]");
+        int lines = Math.max(1, layout.placeholderLines());
+        for (int i = 1; i < lines; i++) {
+            builder.append('\n').append(' ');
+        }
+
+        return Component.literal(builder.toString());
     }
 
-    private static boolean shouldWrapCard(Minecraft minecraft, RedEnvelopeSnapshot snapshot) {
-        ChatComponent chat = minecraft.gui.getChat();
-        String sender = snapshot.senderName().isBlank() ? "Server" : snapshot.senderName();
-        int senderWidth = minecraft.font.width("<" + sender + "> ");
-        return senderWidth + RED_ENVELOPE_INLINE_GAP + RED_ENVELOPE_CARD_WIDTH > chat.getWidth();
+    private static void applyLayout(GuiMessageExtraData data, HookChatComponent.RedEnvelopeLayout layout) {
+        data.redEnvelopeWrapped = layout.wrapped();
+        data.redEnvelopeCardWidth = layout.cardWidth();
+        data.redEnvelopeCardHeight = layout.cardHeight();
+        data.redEnvelopeTotalHeight = layout.totalHeight();
+        data.redEnvelopePlaceholderLines = layout.placeholderLines();
     }
 
     private static void addOrUpdateChatMessage(Minecraft minecraft, RedEnvelopeSnapshot snapshot) {
+        HookChatComponent.RedEnvelopeLayout layout = HookChatComponent.computeLayout(minecraft, snapshot);
         GuiMessage existing = CHAT_MESSAGES.get(snapshot.id());
         if (existing != null) {
             GuiMessageExtraData data = GuiMessageAttachment.get(existing);
             if (data != null) {
                 data.redEnvelopeSnapshot = snapshot;
                 data.isRedEnvelope = true;
+                applyLayout(data, layout);
             }
 
             return;
         }
 
-        boolean wrapped = shouldWrapCard(minecraft, snapshot);
         ChatComponent chat = minecraft.gui.getChat();
-        GuiMessage message = new GuiMessage(minecraft.gui.getGuiTicks(), makeChatContent(snapshot, wrapped), null, GuiMessageSource.SYSTEM_SERVER, GuiMessageTag.systemSinglePlayer());
+        GuiMessage message = new GuiMessage(minecraft.gui.getGuiTicks(), makeChatContent(snapshot, layout), null, GuiMessageSource.SYSTEM_SERVER, GuiMessageTag.systemSinglePlayer());
         GuiMessageExtraData data = GuiMessageExtraData.redEnvelope(snapshot);
-        data.redEnvelopeWrapped = wrapped;
+        applyLayout(data, layout);
         GuiMessageAttachment.put(message, data);
         CHAT_MESSAGES.put(snapshot.id(), message);
         if (chat.visibleMessageFilter.test(message)) {

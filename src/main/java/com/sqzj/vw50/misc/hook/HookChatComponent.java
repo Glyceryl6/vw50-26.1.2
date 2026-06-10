@@ -29,6 +29,7 @@ import net.minecraft.world.entity.player.PlayerSkin;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -43,9 +44,20 @@ public class HookChatComponent {
     public static ChatComponent.ChatGraphicsAccess chatGraphicsAccess = null;
 
     private static final int RED_ENV_LEFT = 4;
-    private static final int RED_ENV_WIDTH = 158;
-    private static final int RED_ENV_HEIGHT = 32;
+    private static final int RED_ENV_MIN_WIDTH = 118;
+    private static final int RED_ENV_DEFAULT_WIDTH = 158;
+    private static final int RED_ENV_MAX_WIDTH = 220;
+    private static final int RED_ENV_MIN_HEIGHT = 32;
+    private static final int RED_ENV_INLINE_GAP = 4;
     private static final int VANILLA_MESSAGE_HEIGHT = 9;
+    private static final int RED_ENV_HEADER_GAP = 2;
+    private static final int CARD_TEXT_LINE_HEIGHT = 10;
+    private static final int CARD_VERTICAL_PADDING = 6;
+    private static final int CARD_DETAIL_GAP = 2;
+    private static final int CARD_TEXT_LEFT_OFFSET = 30;
+    private static final int CARD_RIGHT_PADDING = 8;
+    private static final int EXCLUSIVE_FACE_SIZE = 8;
+    private static final int EXCLUSIVE_FACE_GAP = 12;
     private static final Pattern VANILLA_PLAYER_MESSAGE = Pattern.compile("^<[^>]+>\\s*(.*)$");
 
     public static void extractRenderState$accept_InjectHead(
@@ -58,15 +70,17 @@ public class HookChatComponent {
         double chatLineSpacing = Minecraft.getInstance().options.chatLineSpacing().get();
         int entryHeight = getEntryHeight(chatLineSpacing);
         int textTop = getTextTop(chatBottom, lineIndex, entryHeight, chatLineSpacing);
-        int cardTop = textTop + VANILLA_MESSAGE_HEIGHT - RED_ENV_HEIGHT;
-        boolean wrapped = extraData.redEnvelopeWrapped;
-        int cardLeft = wrapped ? RED_ENV_LEFT : getInlineCardLeft(extraData);
-        int senderTop = wrapped ? cardTop - VANILLA_MESSAGE_HEIGHT : cardTop + (RED_ENV_HEIGHT - VANILLA_MESSAGE_HEIGHT) / 2;
+        RedEnvelopeLayout layout = layoutFromExtra(extraData);
+        int messageBottom = textTop + VANILLA_MESSAGE_HEIGHT;
+        int renderTop = messageBottom - layout.totalHeight();
+        int cardTop = layout.wrapped() ? renderTop + VANILLA_MESSAGE_HEIGHT : renderTop;
+        int cardLeft = layout.wrapped() ? RED_ENV_LEFT : getInlineCardLeft(extraData);
+        int senderTop = layout.wrapped() ? renderTop : cardTop + Math.max(0, (layout.cardHeight() - VANILLA_MESSAGE_HEIGHT) / 2);
         if (chatGraphicsAccess instanceof ChatComponent.DrawingFocusedGraphicsAccess access) {
-            boolean isMouseOver = access.isMouseOver(cardLeft, cardTop, cardLeft + RED_ENV_WIDTH, cardTop + RED_ENV_HEIGHT);
+            boolean isMouseOver = access.isMouseOver(cardLeft, cardTop, cardLeft + layout.cardWidth(), cardTop + layout.cardHeight());
             ActiveTextCollector.Parameters parameters = access.parameters.withOpacity(alpha * textOpacity);
             renderSenderPrefix(access.textRenderer, parameters, extraData, 0, senderTop);
-            renderRedEnvelope(access.graphics, access.textRenderer, parameters, extraData, cardLeft, cardTop, true, isMouseOver);
+            renderRedEnvelope(access.graphics, access.textRenderer, parameters, extraData, cardLeft, cardTop, layout.cardWidth(), layout.cardHeight(), isMouseOver);
             if (isMouseOver && extraData.redEnvelopeId != null && chat instanceof IChatComponentExtensions extensions) {
                 access.graphics.requestCursor(CursorTypes.POINTING_HAND);
                 extensions.VW50$setMouseOverRedEnvelope(true);
@@ -75,12 +89,38 @@ public class HookChatComponent {
         } else if (chatGraphicsAccess instanceof ChatComponent.DrawingBackgroundGraphicsAccess access) {
             ActiveTextCollector.Parameters parameters = access.parameters.withOpacity(alpha * textOpacity);
             renderSenderPrefix(access.textRenderer, parameters, extraData, 0, senderTop);
-            renderRedEnvelope(access.graphics, access.textRenderer, parameters, extraData, cardLeft, cardTop, false, false);
+            renderRedEnvelope(access.graphics, access.textRenderer, parameters, extraData, cardLeft, cardTop, layout.cardWidth(), layout.cardHeight(), false);
         }
     }
 
+    public static RedEnvelopeLayout computeLayout(Minecraft minecraft, RedEnvelopeSnapshot snapshot) {
+        int chatWidth = Math.max(RED_ENV_MIN_WIDTH, minecraft.gui.getChat().getWidth());
+        int senderWidth = minecraft.font.width(makeSenderText(snapshot));
+        int desiredWidth = getDesiredCardWidth(minecraft, snapshot);
+        int inlineAvailable = chatWidth - RED_ENV_LEFT - senderWidth - RED_ENV_INLINE_GAP;
+        boolean wrapped = inlineAvailable < RED_ENV_MIN_WIDTH || senderWidth + RED_ENV_INLINE_GAP + desiredWidth > chatWidth - RED_ENV_LEFT;
+        int maxAvailable = wrapped ? chatWidth - RED_ENV_LEFT : inlineAvailable;
+        int cardWidth = clamp(desiredWidth, Math.clamp(maxAvailable, 60, RED_ENV_MIN_WIDTH), Math.clamp(maxAvailable, 60, RED_ENV_MAX_WIDTH));
+        int cardHeight = getCardHeight(minecraft, snapshot, cardWidth);
+        int totalHeight = wrapped ? VANILLA_MESSAGE_HEIGHT + RED_ENV_HEADER_GAP + cardHeight : cardHeight;
+        int entryHeight = getEntryHeight(minecraft.options.chatLineSpacing().get());
+        int placeholderLines = Math.max(1, (int)Math.ceil(Math.max(0, totalHeight - VANILLA_MESSAGE_HEIGHT) / (double)entryHeight) + 1);
+        return new RedEnvelopeLayout(wrapped, cardWidth, cardHeight, totalHeight, placeholderLines);
+    }
+
+    public record RedEnvelopeLayout(boolean wrapped, int cardWidth, int cardHeight, int totalHeight, int placeholderLines) { }
+
+    private static RedEnvelopeLayout layoutFromExtra(GuiMessageExtraData extraData) {
+        return new RedEnvelopeLayout(
+                extraData.redEnvelopeWrapped,
+                Math.max(60, extraData.redEnvelopeCardWidth),
+                Math.max(RED_ENV_MIN_HEIGHT, extraData.redEnvelopeCardHeight),
+                Math.max(RED_ENV_MIN_HEIGHT, extraData.redEnvelopeTotalHeight),
+                Math.max(1, extraData.redEnvelopePlaceholderLines));
+    }
+
     private static int getEntryHeight(double chatLineSpacing) {
-        return Mth.floor(VANILLA_MESSAGE_HEIGHT * (chatLineSpacing + 1.0F));
+        return (int)Math.floor(VANILLA_MESSAGE_HEIGHT * (chatLineSpacing + 1.0F));
     }
 
     private static int getTextTop(int chatBottom, int lineIndex, int entryHeight, double chatLineSpacing) {
@@ -101,28 +141,30 @@ public class HookChatComponent {
             ActiveTextCollector textRenderer,
             ActiveTextCollector.Parameters parameters,
             GuiMessageExtraData extraData,
-            int left, int top, boolean focused, boolean hovered) {
+            int left, int top, int width, int height, boolean hovered) {
         RedEnvelopeSnapshot snapshot = extraData.redEnvelopeSnapshot;
         boolean inactive = snapshot != null && snapshot.status() != RedEnvelopeStatus.ACTIVE;
         int alphaWhite = ARGB.white(parameters.opacity());
         int border = applyOpacity(hovered ? 0xFFFFD27A : 0xFFFFB24A, parameters.opacity());
         int body = applyOpacity(inactive ? 0xFF8A5C4A : 0xFFC83F2D, parameters.opacity());
         int body2 = applyOpacity(inactive ? 0xFF5D443C : 0xFF9D231C, parameters.opacity());
-        graphics.fill(left, top, left + RED_ENV_WIDTH, top + RED_ENV_HEIGHT, body);
-        graphics.fill(left + 2, top + 2, left + RED_ENV_WIDTH - 2, top + RED_ENV_HEIGHT - 2, body2);
-        graphics.fill(left, top, left + RED_ENV_WIDTH, top + 1, border);
-        graphics.fill(left, top + RED_ENV_HEIGHT - 1, left + RED_ENV_WIDTH, top + RED_ENV_HEIGHT, border);
-        graphics.blit(RenderPipelines.GUI_TEXTURED, RED_ENV_COMPONENT_LOCATION,
-                left + 8, top + 8, 0.0F, 0.0F,
-                16, 16, 16, 16, alphaWhite);
-        int textLeft = left + 30;
-        Component title = makeTitle(snapshot);
-        textRenderer.accept(TextAlignment.LEFT, textLeft, top + 5, parameters, title);
-        renderCardDetail(graphics, textRenderer, parameters, snapshot, textLeft, top, alphaWhite);
-        if (focused && snapshot != null && snapshot.usePassword()) {
-            Component hint = Component.translatable("red_envelope.chat.password_hint").withStyle(ChatFormatting.YELLOW);
-            textRenderer.accept(TextAlignment.LEFT, left + RED_ENV_WIDTH + 6, top + 10, parameters, hint);
+        graphics.fill(left, top, left + width, top + height, body);
+        graphics.fill(left + 2, top + 2, left + width - 2, top + height - 2, body2);
+        graphics.fill(left, top, left + width, top + 1, border);
+        graphics.fill(left, top + height - 1, left + width, top + height, border);
+        int iconY = top + Math.max(8, (height - 16) / 2);
+        graphics.blit(RenderPipelines.GUI_TEXTURED, RED_ENV_COMPONENT_LOCATION, left + 8, iconY,
+                0.0F, 0.0F, 16, 16, 16, 16, alphaWhite);
+        int textLeft = left + CARD_TEXT_LEFT_OFFSET;
+        int textWidth = Math.max(20, width - CARD_TEXT_LEFT_OFFSET - CARD_RIGHT_PADDING);
+        int y = top + CARD_VERTICAL_PADDING;
+        for (String line : wrapText(makeTitleText(snapshot), textWidth)) {
+            textRenderer.accept(TextAlignment.LEFT, textLeft, y, parameters, Component.literal(line).withStyle(ChatFormatting.GOLD));
+            y += CARD_TEXT_LINE_HEIGHT;
         }
+
+        y += CARD_DETAIL_GAP;
+        renderCardDetail(graphics, textRenderer, parameters, snapshot, textLeft, y, textWidth, alphaWhite);
     }
 
     private static void renderCardDetail(
@@ -130,39 +172,122 @@ public class HookChatComponent {
             ActiveTextCollector textRenderer,
             ActiveTextCollector.Parameters parameters,
             RedEnvelopeSnapshot snapshot,
-            int textLeft, int top, int alphaWhite) {
+            int textLeft,
+            int y,
+            int textWidth,
+            int alphaWhite) {
         if (snapshot == null) {
-            textRenderer.accept(TextAlignment.LEFT, textLeft, top + 19, parameters, Component.translatable("red_envelope.chat.click"));
+            drawWrapped(textRenderer, parameters, textLeft, y, textWidth, Component.translatable("red_envelope.chat.click").getString(), ChatFormatting.YELLOW);
             return;
         }
         if (snapshot.status() != RedEnvelopeStatus.ACTIVE) {
-            textRenderer.accept(TextAlignment.LEFT, textLeft, top + 19, parameters, Component.translatable("red_envelope.chat.finished").withStyle(ChatFormatting.DARK_GRAY));
+            drawWrapped(textRenderer, parameters, textLeft, y, textWidth, Component.translatable("red_envelope.chat.finished").getString(), ChatFormatting.DARK_GRAY);
             return;
         }
         if (snapshot.viewerClaimed()) {
-            textRenderer.accept(TextAlignment.LEFT, textLeft, top + 19, parameters, Component.translatable("red_envelope.chat.claimed", snapshot.claimedCount(), snapshot.playerCount()).withStyle(ChatFormatting.GRAY));
+            drawWrapped(textRenderer, parameters, textLeft, y, textWidth, Component.translatable("red_envelope.chat.claimed", snapshot.claimedCount(), snapshot.playerCount()).getString(), ChatFormatting.GRAY);
             return;
         }
         if (snapshot.usePassword()) {
             String password = snapshot.password().isBlank() ? "?" : snapshot.password();
-            textRenderer.accept(TextAlignment.LEFT, textLeft, top + 19, parameters, Component.translatable("red_envelope.chat.password_value", password).withStyle(ChatFormatting.YELLOW));
+            drawWrapped(textRenderer, parameters, textLeft, y, textWidth, Component.translatable("red_envelope.chat.copy_password", password).getString(), ChatFormatting.YELLOW);
             return;
         }
         if (!snapshot.exclusiveUser().isBlank()) {
-            int faceY = top + 18;
-            graphics.fill(textLeft - 1, faceY - 1, textLeft + 9, faceY + 9, applyOpacity(0xFFFFD27A, parameters.opacity()));
-            renderPlayerHead(graphics, snapshot.exclusiveUser(), textLeft, faceY, alphaWhite);
-            textRenderer.accept(TextAlignment.LEFT, textLeft + 12, top + 19, parameters, Component.translatable("red_envelope.chat.exclusive_value", snapshot.exclusiveUser()).withStyle(ChatFormatting.YELLOW));
+            graphics.fill(textLeft - 1, y - 1, textLeft + EXCLUSIVE_FACE_SIZE + 1, y + EXCLUSIVE_FACE_SIZE + 1, applyOpacity(0xFFFFD27A, parameters.opacity()));
+            renderPlayerHead(graphics, snapshot.exclusiveUser(), textLeft, y, alphaWhite);
+            drawWrapped(textRenderer, parameters, textLeft + EXCLUSIVE_FACE_GAP, y, Math.max(20, textWidth - EXCLUSIVE_FACE_GAP), Component.translatable("red_envelope.chat.exclusive_value", snapshot.exclusiveUser()).getString(), ChatFormatting.YELLOW);
             return;
         }
 
-        textRenderer.accept(TextAlignment.LEFT, textLeft, top + 19, parameters, Component.translatable("red_envelope.chat.click", snapshot.claimedCount(), snapshot.playerCount()).withStyle(ChatFormatting.YELLOW));
+        drawWrapped(textRenderer, parameters, textLeft, y, textWidth, Component.translatable("red_envelope.chat.click", snapshot.claimedCount(), snapshot.playerCount()).getString(), ChatFormatting.YELLOW);
+    }
+
+    private static void drawWrapped(ActiveTextCollector textRenderer, ActiveTextCollector.Parameters parameters, int x, int y, int width, String text, ChatFormatting formatting) {
+        int currentY = y;
+        for (String line : wrapText(text, width)) {
+            textRenderer.accept(TextAlignment.LEFT, x, currentY, parameters, Component.literal(line).withStyle(formatting));
+            currentY += CARD_TEXT_LINE_HEIGHT;
+        }
+    }
+
+    private static int getDesiredCardWidth(Minecraft minecraft, RedEnvelopeSnapshot snapshot) {
+        int titleWidth = minecraft.font.width(makeTitleText(snapshot));
+        int detailWidth = minecraft.font.width(makeDetailText(snapshot));
+        if (snapshot != null && !snapshot.exclusiveUser().isBlank()) {
+            detailWidth += EXCLUSIVE_FACE_GAP;
+        }
+
+        int desired = CARD_TEXT_LEFT_OFFSET + Math.max(titleWidth, detailWidth) + CARD_RIGHT_PADDING;
+        return Mth.clamp(desired, RED_ENV_DEFAULT_WIDTH, RED_ENV_MAX_WIDTH);
+    }
+
+    private static int getCardHeight(Minecraft minecraft, RedEnvelopeSnapshot snapshot, int cardWidth) {
+        int textWidth = Math.max(20, cardWidth - CARD_TEXT_LEFT_OFFSET - CARD_RIGHT_PADDING);
+        int titleLines = wrapText(makeTitleText(snapshot), textWidth).size();
+        int detailTextWidth = textWidth;
+        if (snapshot != null && !snapshot.exclusiveUser().isBlank()) {
+            detailTextWidth = Math.max(20, textWidth - EXCLUSIVE_FACE_GAP);
+        }
+
+        int detailLines = wrapText(makeDetailText(snapshot), detailTextWidth).size();
+        int detailHeight = Math.max(CARD_TEXT_LINE_HEIGHT, detailLines * CARD_TEXT_LINE_HEIGHT);
+        return Math.max(RED_ENV_MIN_HEIGHT, CARD_VERTICAL_PADDING * 2 + titleLines * CARD_TEXT_LINE_HEIGHT + CARD_DETAIL_GAP + detailHeight);
+    }
+
+    private static List<String> wrapText(String text, int maxWidth) {
+        Minecraft minecraft = Minecraft.getInstance();
+        List<String> result = new ArrayList<>();
+        if (text == null || text.isBlank()) {
+            result.add("");
+            return result;
+        }
+
+        int safeWidth = Math.max(1, maxWidth);
+        StringBuilder current = new StringBuilder();
+        text.codePoints().forEach(codePoint -> {
+            String s = new String(Character.toChars(codePoint));
+            if ("\n".equals(s)) {
+                result.add(current.toString());
+                current.setLength(0);
+                return;
+            }
+
+            if (!current.isEmpty() && minecraft.font.width(current + s) > safeWidth) {
+                result.add(current.toString());
+                current.setLength(0);
+            }
+
+            current.append(s);
+        });
+        if (!current.isEmpty() || result.isEmpty()) result.add(current.toString());
+        return result;
+    }
+
+    private static int clamp(int value, int min, int max) {
+        if (max < min) return max;
+        return Mth.clamp(value, min, max);
+    }
+
+    private static String makeTitleText(RedEnvelopeSnapshot snapshot) {
+        if (snapshot == null || snapshot.title().isBlank()) return Component.translatable("red_envelope.chat.card_title").getString();
+        return snapshot.title();
+    }
+
+    private static String makeDetailText(RedEnvelopeSnapshot snapshot) {
+        if (snapshot == null) return Component.translatable("red_envelope.chat.click").getString();
+        if (snapshot.status() != RedEnvelopeStatus.ACTIVE) return Component.translatable("red_envelope.chat.finished").getString();
+        if (snapshot.viewerClaimed()) return Component.translatable("red_envelope.chat.claimed", snapshot.claimedCount(), snapshot.playerCount()).getString();
+        if (snapshot.usePassword()) {
+            String password = snapshot.password().isBlank() ? "?" : snapshot.password();
+            return Component.translatable("red_envelope.chat.copy_password", password).getString();
+        }
+        if (!snapshot.exclusiveUser().isBlank()) return Component.translatable("red_envelope.chat.exclusive_value", snapshot.exclusiveUser()).getString();
+        return Component.translatable("red_envelope.chat.click", snapshot.claimedCount(), snapshot.playerCount()).getString();
     }
 
     private static void renderPlayerHead(GuiGraphicsExtractor graphics, String playerName, int x, int y, int alphaWhite) {
         Identifier skin = getPlayerSkin(playerName).body().texturePath();
-        // Face layer and hat layer.  If the target player is not in the local tab list,
-        // DefaultPlayerSkin supplies a stable fallback skin.
         graphics.blit(RenderPipelines.GUI_TEXTURED, skin, x, y, 8.0F, 8.0F, 8, 8, 64, 64, alphaWhite);
         graphics.blit(RenderPipelines.GUI_TEXTURED, skin, x, y, 40.0F, 8.0F, 8, 8, 64, 64, alphaWhite);
     }
@@ -173,8 +298,7 @@ public class HookChatComponent {
             PlayerInfo info = minecraft.getConnection().getPlayerInfo(playerName);
             if (info != null) return info.getSkin();
         }
-
-        UUID fallback = UUID.nameUUIDFromBytes(("OfflinePlayer: " + playerName).getBytes(StandardCharsets.UTF_8));
+        UUID fallback = UUID.nameUUIDFromBytes(("OfflinePlayer:" + playerName).getBytes(StandardCharsets.UTF_8));
         return DefaultPlayerSkin.get(fallback);
     }
 
@@ -187,12 +311,6 @@ public class HookChatComponent {
         if (snapshot == null) return "<Server> ";
         String sender = snapshot.senderName().isBlank() ? "Server" : snapshot.senderName();
         return "<" + sender + "> ";
-    }
-
-    private static Component makeTitle(RedEnvelopeSnapshot snapshot) {
-        if (snapshot == null) return Component.translatable("red_envelope.chat.card_title").withStyle(ChatFormatting.GOLD);
-        String title = snapshot.title().isBlank() ? Component.translatable("red_envelope.chat.card_title").getString() : snapshot.title();
-        return Component.literal(title).withStyle(ChatFormatting.GOLD);
     }
 
     public static void extractRenderState$accept_InjectTail(ChatComponent chat, GuiMessage.Line line, int textTop) {

@@ -12,6 +12,10 @@ public final class GuiMessageExtraData {
     public UUID redEnvelopeId;
     public RedEnvelopeSnapshot redEnvelopeSnapshot;
     public boolean redEnvelopeWrapped;
+    public int redEnvelopeCardWidth;
+    public int redEnvelopeCardHeight;
+    public int redEnvelopeTotalHeight;
+    public int redEnvelopePlaceholderLines;
 
     public GuiMessageExtraData(boolean canPlusOne, boolean isRedEnvelope) {
         this.canPlusOne = canPlusOne;
@@ -20,6 +24,10 @@ public final class GuiMessageExtraData {
         this.redEnvelopeId = null;
         this.redEnvelopeSnapshot = null;
         this.redEnvelopeWrapped = false;
+        this.redEnvelopeCardWidth = 158;
+        this.redEnvelopeCardHeight = 32;
+        this.redEnvelopeTotalHeight = 32;
+        this.redEnvelopePlaceholderLines = 3;
     }
 
     public static GuiMessageExtraData redEnvelope(RedEnvelopeSnapshot snapshot) {
@@ -28,4 +36,5 @@ public final class GuiMessageExtraData {
         data.redEnvelopeSnapshot = snapshot;
         return data;
     }
+
 }
