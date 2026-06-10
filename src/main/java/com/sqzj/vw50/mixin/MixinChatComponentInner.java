@@ -18,7 +18,7 @@ public class MixinChatComponentInner {
     @Shadow @Final float val$textOpacity;
     @Shadow @Final int val$chatBottom;
 
-    @Inject(method = "accept", at = @At(value = "HEAD"))
+    @Inject(method = "accept", at = @At(value = "HEAD"), cancellable = true)
     private void accept(GuiMessage.Line line, int lineIndex, float alpha, CallbackInfo ci) {
         HookChatComponent.extractRenderState$accept_InjectHead(this.this$0, line, lineIndex, alpha, this.val$chatBottom, this.val$textOpacity, ci);
     }

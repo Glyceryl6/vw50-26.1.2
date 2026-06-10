@@ -20,8 +20,12 @@ public class GuiMessageAttachment {
         EXTRA_DATA.remove(message);
     }
 
-    public static void clear() {
+    public static void clearRepeatMarks() {
         EXTRA_DATA.forEach((_, extraData) -> extraData.canPlusOne = false);
+    }
+
+    public static void clear() {
+        EXTRA_DATA.clear();
     }
 
 }

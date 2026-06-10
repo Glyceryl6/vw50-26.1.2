@@ -4,24 +4,19 @@ import com.mojang.datafixers.util.Pair;
 import com.sqzj.vw50.VW50;
 import com.sqzj.vw50.client.menu.SendRedEnvelopeMenu;
 import com.sqzj.vw50.client.widget.UniversalCheckbox;
-import com.sqzj.vw50.misc.GuiMessageAttachment;
-import com.sqzj.vw50.misc.GuiMessageExtraData;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.multiplayer.chat.GuiMessage;
-import net.minecraft.client.multiplayer.chat.GuiMessageSource;
-import net.minecraft.client.multiplayer.chat.GuiMessageTag;
 import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.core.NonNullList;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
-import org.apache.commons.lang3.StringUtils;
+import com.sqzj.vw50.server.network.SendRedEnvelopePayload;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import org.jspecify.annotations.NonNull;
 
 import java.util.List;
@@ -31,7 +26,6 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
     private static final Identifier LOCATION = VW50.prefix("textures/gui/send_red_envelope.png");
     private static final Identifier CHECKBOX_CHECKED = VW50.prefix("small_checkbox_checked");
     private static final Identifier CHECKBOX_UNCHECKED = VW50.prefix("small_checkbox_unchecked");
-    private static final Component DEFAULT_TITLE = Component.translatable("red_envelope.default_title");
     private static final Component TOO_MANY_PLAYERS = Component.translatable("red_envelope.too_many_players").withStyle(ChatFormatting.RED);
     private static final Component PLAYER_MORE_THAN_ITEMS = Component.translatable("red_envelope.player_more_than_items").withStyle(ChatFormatting.RED);
     private static final Component LUCKY_MONEY = Component.translatable("red_envelope.lucky_money").withStyle(ChatFormatting.BOLD);
@@ -51,8 +45,8 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
     private EditBox numberBox;
     private EditBox nameBox;
     private ImageButton sendButton;
-    private boolean isLuckyMoney;
-    private boolean destroyOnExpired;
+    private boolean isLuckyMoney = true;
+    private boolean returnWhenExpired = true;
     private boolean playerTooMany;
     private boolean playerMoreThanItems;
     private Property property = Property.NORMAL;
@@ -72,7 +66,6 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         this.nameBox = new EditBox(this.font, x + 105, y + 51, 61, 15, Component.empty());
         this.titleBox.setHint(Component.translatable("red_envelope.hint.title"));
         this.titleBox.setMaxLength(20);
-        this.numberBox.setValue("0");
         this.numberBox.setHint(Component.translatable("red_envelope.hint.number"));
         this.numberBox.setFilter(value -> value.matches("\\d+"));
         this.numberBox.setResponder(this::updateSendButtonState);
@@ -80,7 +73,7 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         this.nameBox.setMaxLength(30);
         this.sendButton = new ImageButton(x + 109, y + 74, 50, 18, SEND_BUTTON_SPRITES, this::sendRedEnvelope);
         this.addRenderableWidget(new UniversalCheckbox(x + 57, y + 33, 16, 16, sprites, true, (_, value) -> this.isLuckyMoney = value));
-        this.addRenderableWidget(new UniversalCheckbox(x + 57, y + 51, 16, sprites, (_, value) -> this.destroyOnExpired = value));
+        this.addRenderableWidget(new UniversalCheckbox(x + 57, y + 51, 16, sprites, (_, value) -> this.returnWhenExpired = value));
         this.addRenderableWidget(CycleButton.builder(Property::getDescription, this.property)
                 .withValues(Property.values()).displayState(CycleButton.DisplayState.VALUE)
                 .withSprite((button, _) -> PROPERTY_BUTTON_SPRITES.get(button.isActive(), button.isHoveredOrFocused()))
@@ -119,10 +112,10 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
 
     @Override
     public boolean keyPressed(@NonNull KeyEvent event) {
-        if (this.titleBox.keyPressed(event) || this.numberBox.keyPressed(event)) {
+        if (this.titleBox.keyPressed(event) || this.numberBox.keyPressed(event) || this.nameBox.keyPressed(event)) {
             return true;
         } else {
-            return !event.isEscape() && (this.titleBox.isFocused() || this.numberBox.isFocused()) || super.keyPressed(event);
+            return !event.isEscape() && (this.titleBox.isFocused() || this.numberBox.isFocused() || this.nameBox.isFocused()) || super.keyPressed(event);
         }
     }
 
@@ -137,86 +130,79 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
                 this.numberBox.active = true;
                 this.nameBox.visible = false;
             }
+
             case EXCLUSIVE -> {
-                this.numberBox.setValue("");
+                if (!"1".equals(this.numberBox.getValue())) {
+                    this.numberBox.setValue("1");
+                }
+
                 this.numberBox.active = false;
                 this.nameBox.visible = true;
                 this.nameBox.setHint(HINT_NAME);
             }
+
             case PASSWORD -> {
                 this.numberBox.active = true;
                 this.nameBox.visible = true;
                 this.nameBox.setHint(HINT_PASSWORD);
             }
         }
+
+        this.updateSendButtonState(this.numberBox.getValue());
     }
 
     private void updateSendButtonState(String number) {
-        if (number.isEmpty()) {
-            this.numberBox.setValue("0");
-            return;
-        }
+        if (this.sendButton == null || this.numberBox == null) return;
+        this.playerTooMany = false;
+        this.playerMoreThanItems = false;
+        int playerCount = parsePositive(number);
+        int itemCount = this.getGiftCount();
+        boolean hasProperty = this.property == Property.NORMAL || !this.nameBox.getValue().isBlank();
+        boolean numberOk = this.property == Property.EXCLUSIVE || playerCount > 0;
+        boolean countOk = itemCount > 0 && playerCount <= itemCount;
+        boolean maxOk = playerCount <= 256;
+        this.playerMoreThanItems = itemCount > 0 && playerCount > itemCount;
+        this.playerTooMany = playerCount > 256;
+        this.numberBox.setTextColor((numberOk && countOk && maxOk) ? -1 : -40864);
+        this.sendButton.active = itemCount > 0 && numberOk && countOk && maxOk && hasProperty;
+    }
 
-        if (number.matches("\\d+")) {
-            String trimmed = number.replaceFirst("^0+(?!$)", StringUtils.EMPTY);
-            if (!trimmed.equals(number)) {
-                this.numberBox.setValue(trimmed);
-                this.numberBox.setCursorPosition(trimmed.length());
-            }
+    private int parsePositive(String number) {
+        if (number == null || number.isBlank()) return 0;
+        try {
+            return Integer.parseInt(number);
+        } catch (NumberFormatException ignored) {
+            return 0;
         }
+    }
 
-        NonNullList<ItemStack> stacks = this.menu.giftSlot.copyToList();
-        if (stacks.isEmpty()) {
-            this.sendButton.active = false;
-            return;
-        } else {
-            if (Integer.parseInt(number) > stacks.size()) {
-                this.numberBox.setTextColor(-40864);
-                this.sendButton.active = false;
-                this.playerMoreThanItems = true;
-                return;
-            } else {
-                this.numberBox.setTextColor(-1);
-                this.sendButton.active = true;
-                this.playerMoreThanItems = false;
-            }
-        }
-
-        if (Integer.parseInt(number) > 256) {
-            this.numberBox.setTextColor(-40864);
-            this.playerTooMany = true;
-        } else {
-            this.numberBox.setTextColor(-1);
-            this.playerTooMany = false;
-        }
+    private int getGiftCount() {
+        return this.menu.giftSlot.copyToList().stream().filter(stack -> !stack.isEmpty()).mapToInt(ItemStack::getCount).sum();
     }
 
     private void updateProperty(Property property) {
-        List.of(this.numberBox, this.nameBox).forEach(editBox -> editBox.setValue(""));
-        this.property = property;
-        String number = this.numberBox.getValue();
-        String name = this.nameBox.getValue();
-        switch (property) {
-            case NORMAL -> this.sendButton.active = !number.isEmpty();
-            case EXCLUSIVE -> this.sendButton.active = !name.isEmpty();
-            case PASSWORD -> this.sendButton.active = !number.isEmpty() && !name.isEmpty();
+        this.nameBox.setValue("");
+        if (property == Property.EXCLUSIVE) {
+            this.numberBox.setValue("1");
+        } else if (this.numberBox.getValue().equals("1") && this.property == Property.EXCLUSIVE) {
+            this.numberBox.setValue("");
         }
+
+        this.property = property;
+        this.updateUIForType();
     }
 
     private void sendRedEnvelope(Button button) {
-        String title = this.titleBox.getValue();
-        String number = this.numberBox.getValue();
-        String name = this.nameBox.getValue();
-        if (title.isEmpty()) title = DEFAULT_TITLE.getString();
-        ChatComponent chat = this.minecraft.gui.getChat();
-        GuiMessage message = new GuiMessage(this.minecraft.gui.getGuiTicks(), Component.literal(title),
-                null, GuiMessageSource.SYSTEM_SERVER, GuiMessageTag.systemSinglePlayer());
-        GuiMessageAttachment.put(message, new GuiMessageExtraData(Boolean.FALSE, Boolean.TRUE));
-        if (chat.visibleMessageFilter.test(message)) {
-            chat.logChatMessage(message);
-            chat.addMessageToDisplayQueue(message);
-            chat.addMessageToQueue(message);
-        }
+        String title = this.titleBox.getValue().trim();
+        String propertyValue = this.nameBox.getValue().trim();
+        int playerCount = this.property == Property.EXCLUSIVE ? 1 : this.parsePositive(this.numberBox.getValue());
+        SendRedEnvelopePayload.PropertyType type = switch (this.property) {
+            case NORMAL -> SendRedEnvelopePayload.PropertyType.NORMAL;
+            case PASSWORD -> SendRedEnvelopePayload.PropertyType.PASSWORD;
+            case EXCLUSIVE -> SendRedEnvelopePayload.PropertyType.EXCLUSIVE;
+        };
+
+        ClientPacketDistributor.sendToServer(new SendRedEnvelopePayload(title, playerCount, this.isLuckyMoney, this.returnWhenExpired, type, propertyValue));
     }
 
     private enum Property implements StringRepresentable {
