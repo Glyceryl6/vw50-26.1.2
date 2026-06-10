@@ -1,8 +1,9 @@
 package com.sqzj.vw50.mixin;
 
 import com.sqzj.vw50.api.IChatComponentExtensions;
-import com.sqzj.vw50.client.ClientRepeatLimiter;
+import com.sqzj.vw50.client.ClientRedEnvelopeManager;
 import com.sqzj.vw50.server.network.ClaimRedEnvelopePayload;
+import com.sqzj.vw50.server.network.RedEnvelopeSnapshot;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.screens.ChatScreen;
@@ -31,7 +32,19 @@ public class MixinChatScreen extends Screen {
             if (extensions.VW50$isMouseOverRedEnvelope()) {
                 UUID id = extensions.VW50$getMouseOverRedEnvelopeId();
                 if (id != null) {
-                    ClientPacketDistributor.sendToServer(new ClaimRedEnvelopePayload(id));
+                    RedEnvelopeSnapshot snapshot = ClientRedEnvelopeManager.getSnapshot(id);
+                    if (snapshot != null && snapshot.usePassword()) {
+                        String password = snapshot.password();
+                        if (!password.isBlank()) {
+                            this.minecraft.keyboardHandler.setClipboard(password);
+                            if (this.minecraft.player != null) {
+                                this.minecraft.player.sendOverlayMessage(Component.translatable("red_envelope.chat.password_copied").withStyle(ChatFormatting.GOLD));
+                            }
+                        }
+                    } else {
+                        ClientPacketDistributor.sendToServer(new ClaimRedEnvelopePayload(id));
+                    }
+
                     cir.setReturnValue(true);
                     return;
                 }
@@ -39,15 +52,6 @@ public class MixinChatScreen extends Screen {
 
             if (extensions.VW50$isMouseOverRepeatButton()) {
                 Component markedMessage = extensions.VW50$getMarkedMessage();
-                if (!ClientRepeatLimiter.tryAcquire()) {
-                    if (this.minecraft.player != null) {
-                        this.minecraft.player.sendOverlayMessage(Component.translatable("repeat.too_fast").withStyle(ChatFormatting.RED));
-                    }
-
-                    cir.setReturnValue(true);
-                    return;
-                }
-
                 String repeatText = markedMessage.getString().trim();
                 if (this.minecraft.player != null && !repeatText.isBlank()) {
                     this.minecraft.player.connection.sendChat(repeatText);

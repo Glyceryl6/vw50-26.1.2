@@ -2,6 +2,7 @@ package com.sqzj.vw50.common.envelope;
 
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.sqzj.vw50.VW50;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.saveddata.SavedDataType;
 
@@ -13,24 +14,33 @@ import java.util.UUID;
 
 public class RedEnvelopeSavedData extends SavedData {
 
+    public static final int DEFAULT_REPEAT_MAX_PER_MINUTE = 6;
+    public static final int DEFAULT_REPEAT_MIN_INTERVAL_MS = 1200;
+
     public static final SavedDataType<RedEnvelopeSavedData> TYPE = new SavedDataType<>(
-            VW50.prefix("red_envelopes"), RedEnvelopeSavedData::new,
-            RecordCodecBuilder.create(instance -> instance.group(
+            Identifier.fromNamespaceAndPath(VW50.MOD_ID, "red_envelopes"),
+            RedEnvelopeSavedData::new, RecordCodecBuilder.create(instance -> instance.group(
                     RedEnvelopeRecord.CODEC.listOf().fieldOf("envelopes").forGetter(data -> data.envelopes),
                     PendingReturnRecord.CODEC.listOf().fieldOf("pending_returns").forGetter(data -> data.pendingReturns),
-                    SendLimitRecord.CODEC.listOf().fieldOf("send_limits").forGetter(data -> data.sendLimits)
+                    SendLimitRecord.CODEC.listOf().fieldOf("send_limits").forGetter(data -> data.sendLimits),
+                    com.mojang.serialization.Codec.INT.optionalFieldOf("repeat_max_per_minute", DEFAULT_REPEAT_MAX_PER_MINUTE).forGetter(data -> data.repeatMaxPerMinute),
+                    com.mojang.serialization.Codec.INT.optionalFieldOf("repeat_min_interval_ms", DEFAULT_REPEAT_MIN_INTERVAL_MS).forGetter(data -> data.repeatMinIntervalMs)
             ).apply(instance, RedEnvelopeSavedData::new)));
 
     public final List<RedEnvelopeRecord> envelopes = new ArrayList<>();
     public final List<PendingReturnRecord> pendingReturns = new ArrayList<>();
     public final List<SendLimitRecord> sendLimits = new ArrayList<>();
+    public int repeatMaxPerMinute = DEFAULT_REPEAT_MAX_PER_MINUTE;
+    public int repeatMinIntervalMs = DEFAULT_REPEAT_MIN_INTERVAL_MS;
 
     public RedEnvelopeSavedData() {}
 
-    public RedEnvelopeSavedData(List<RedEnvelopeRecord> envelopes, List<PendingReturnRecord> pendingReturns, List<SendLimitRecord> sendLimits) {
+    public RedEnvelopeSavedData(List<RedEnvelopeRecord> envelopes, List<PendingReturnRecord> pendingReturns, List<SendLimitRecord> sendLimits, int repeatMaxPerMinute, int repeatMinIntervalMs) {
         this.envelopes.addAll(envelopes);
         this.pendingReturns.addAll(pendingReturns);
         this.sendLimits.addAll(sendLimits);
+        this.repeatMaxPerMinute = Math.max(0, repeatMaxPerMinute);
+        this.repeatMinIntervalMs = Math.max(0, repeatMinIntervalMs);
     }
 
     public Optional<RedEnvelopeRecord> getEnvelope(UUID id) {
@@ -54,6 +64,12 @@ public class RedEnvelopeSavedData extends SavedData {
     public void setLimit(SendLimitRecord newLimit) {
         this.sendLimits.removeIf(limit -> limit.playerUuid().equals(newLimit.playerUuid()));
         this.sendLimits.add(newLimit);
+        this.setDirty();
+    }
+
+    public void setRepeatLimit(int maxPerMinute, int minIntervalMs) {
+        this.repeatMaxPerMinute = Math.max(0, maxPerMinute);
+        this.repeatMinIntervalMs = Math.max(0, minIntervalMs);
         this.setDirty();
     }
 

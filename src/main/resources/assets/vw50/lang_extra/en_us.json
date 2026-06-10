@@ -18,5 +18,9 @@
   "red_envelope.chat.card_password": "Password Red Envelope",
   "red_envelope.chat.card_exclusive": "Exclusive Red Envelope",
   "red_envelope.chat.password_value": "Password: %s",
-  "red_envelope.chat.exclusive_value": "For %s"
+  "red_envelope.chat.exclusive_value": "For %s",
+  "red_envelope.chat.copy_password": "Click to copy: %s",
+  "red_envelope.chat.password_copied": "Password copied to clipboard",
+  "red_envelope.claim.need_password": "This is a password red envelope. Copy and send the password in chat",
+  "repeat.limit.updated": "Repeat limit updated: %s per minute, %s ms minimum interval"
 }

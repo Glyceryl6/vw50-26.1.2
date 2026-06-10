@@ -32,7 +32,7 @@
   "red_envelope.claim.hidden": "你看不到这个红包",
   "red_envelope.claim.finished": "红包已经结束",
   "red_envelope.claim.already": "你已经领取过这个红包",
-  "red_envelope.claim.need_password": "这是口令红包，请发送口令领取",
+  "red_envelope.claim.need_password": "这是口令红包，请复制并在聊天栏发送口令",
   "red_envelope.claim.exclusive": "这是专属红包",
   "red_envelope.claim.success": "领取成功，获得 %s 个物品",
   "red_envelope.expired.returned": "红包“%s”已过期，剩余物品已退还",
@@ -50,5 +50,8 @@
   "red_envelope.chat.card_password": "口令红包",
   "red_envelope.chat.card_exclusive": "专属红包",
   "red_envelope.chat.password_value": "口令：%s",
-  "red_envelope.chat.exclusive_value": "专属：%s"
+  "red_envelope.chat.exclusive_value": "专属：%s",
+  "red_envelope.chat.copy_password": "点击复制口令：%s",
+  "red_envelope.chat.password_copied": "口令已复制到剪贴板",
+  "repeat.limit.updated": "已更新复读限制：每分钟 %s 次，最小间隔 %s 毫秒"
 }

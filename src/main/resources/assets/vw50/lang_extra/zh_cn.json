@@ -18,5 +18,9 @@
   "red_envelope.chat.card_password": "口令红包",
   "red_envelope.chat.card_exclusive": "专属红包",
   "red_envelope.chat.password_value": "口令：%s",
-  "red_envelope.chat.exclusive_value": "专属：%s"
+  "red_envelope.chat.exclusive_value": "专属：%s",
+  "red_envelope.chat.copy_password": "点击复制口令：%s",
+  "red_envelope.chat.password_copied": "口令已复制到剪贴板",
+  "red_envelope.claim.need_password": "这是口令红包，请复制并在聊天栏发送口令",
+  "repeat.limit.updated": "已更新复读限制：每分钟 %s 次，最小间隔 %s 毫秒"
 }

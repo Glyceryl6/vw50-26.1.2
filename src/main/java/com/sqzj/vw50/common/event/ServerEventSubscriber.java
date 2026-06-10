@@ -22,6 +22,7 @@ import java.util.UUID;
 public class ServerEventSubscriber {
 
     private static final Map<UUID, Deque<Long>> REPEAT_TIMES = new HashMap<>();
+    private static final Map<UUID, Long> LAST_REPEAT_TIME = new HashMap<>();
     private static String lastPlayerMessage = "";
 
     @SubscribeEvent
@@ -31,21 +32,28 @@ public class ServerEventSubscriber {
 
     @SubscribeEvent
     public static void onServerChatSubmitted(ServerChatEvent event) {
-        if (RedEnvelopeService.tryPasswordClaim(event.getPlayer(), event.getRawText())) {
-            event.setCanceled(true);
-            return;
-        }
-
+        // Password messages should remain normal public chat messages.  This lets
+        // other players see and repeat the password, while still queueing the claim.
+        RedEnvelopeService.tryPasswordClaim(event.getPlayer(), event.getRawText());
         if (event.getRawText().equals(lastPlayerMessage)) {
             long now = System.currentTimeMillis();
-            Deque<Long> times = REPEAT_TIMES.computeIfAbsent(event.getPlayer().getUUID(), _ -> new ArrayDeque<>());
-            while (!times.isEmpty() && now - times.peekFirst() > 60_000L) times.removeFirst();
-            if (times.size() >= RedEnvelopeService.DEFAULT_REPEAT_MAX_PER_MINUTE) {
-                event.getPlayer().sendSystemMessage(Component.translatable("repeat.too_fast").withStyle(ChatFormatting.RED), true);
-                event.setCanceled(true);
-                return;
+            int maxPerMinute = RedEnvelopeService.getRepeatMaxPerMinute(event.getPlayer().server);
+            int minIntervalMs = RedEnvelopeService.getRepeatMinIntervalMs(event.getPlayer().server);
+            if (maxPerMinute > 0 || minIntervalMs > 0) {
+                Deque<Long> times = REPEAT_TIMES.computeIfAbsent(event.getPlayer().getUUID(), _ -> new ArrayDeque<>());
+                while (!times.isEmpty() && now - times.peekFirst() > 60_000L) times.removeFirst();
+                long last = LAST_REPEAT_TIME.getOrDefault(event.getPlayer().getUUID(), Long.MIN_VALUE / 2L);
+                boolean tooMany = maxPerMinute > 0 && times.size() >= maxPerMinute;
+                boolean tooFast = minIntervalMs > 0 && now - last < minIntervalMs;
+                if (tooMany || tooFast) {
+                    event.getPlayer().sendSystemMessage(Component.translatable("repeat.too_fast").withStyle(ChatFormatting.RED), true);
+                    event.setCanceled(true);
+                    return;
+                }
+
+                times.addLast(now);
+                LAST_REPEAT_TIME.put(event.getPlayer().getUUID(), now);
             }
-            times.addLast(now);
         } else {
             lastPlayerMessage = event.getRawText();
         }

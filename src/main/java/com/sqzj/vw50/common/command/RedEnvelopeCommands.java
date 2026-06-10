@@ -16,20 +16,33 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.Comparator;
 
-public class RedEnvelopeCommands {
+public final class RedEnvelopeCommands {
+
+    private RedEnvelopeCommands() {
+    }
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("vw50").then(Commands.literal("hand").then(Commands.argument("playerCount", IntegerArgumentType.integer(1, 256))
-                        .executes(context -> sendHand(context.getSource(), IntegerArgumentType.getInteger(context, "playerCount"), "")).then(Commands.argument("label", StringArgumentType.greedyString())
-                                .executes(context -> sendHand(context.getSource(), IntegerArgumentType.getInteger(context, "playerCount"), StringArgumentType.getString(context, "label"))))))
+        dispatcher.register(Commands.literal("vw50").then(Commands.literal("hand")
+                        .then(Commands.argument("playerCount", IntegerArgumentType.integer(1, 256))
+                                .executes(context -> sendHand(context.getSource(), IntegerArgumentType.getInteger(context, "playerCount"), ""))
+                                .then(Commands.argument("label", StringArgumentType.greedyString())
+                                        .executes(context -> sendHand(context.getSource(), IntegerArgumentType.getInteger(context, "playerCount"),
+                                                StringArgumentType.getString(context, "label"))))))
                 .then(Commands.literal("history").executes(context -> showHistory(context.getSource())))
                 .then(Commands.literal("permission").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                         .then(Commands.literal("cooldown").then(Commands.argument("player", EntityArgument.player()).then(Commands.argument("seconds", IntegerArgumentType.integer(0, 3600))
                                 .executes(context -> setLimit(context.getSource(), EntityArgument.getPlayer(context, "player"), IntegerArgumentType.getInteger(context, "seconds"), false)))))
                         .then(Commands.literal("block").then(Commands.argument("player", EntityArgument.player())
-                                .executes(context -> setLimit(context.getSource(), EntityArgument.getPlayer(context, "player"), 0, true))))
+                                        .executes(context -> setLimit(context.getSource(), EntityArgument.getPlayer(context, "player"), 0, true))))
                         .then(Commands.literal("unblock").then(Commands.argument("player", EntityArgument.player())
-                                .executes(context -> setLimit(context.getSource(), EntityArgument.getPlayer(context, "player"), 0, false))))));
+                                        .executes(context -> setLimit(context.getSource(), EntityArgument.getPlayer(context, "player"), 0, false)))))
+                .then(Commands.literal("repeatLimit").requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
+                        .then(Commands.argument("maxPerMinute", IntegerArgumentType.integer(0, 120))
+                                .executes(context -> setRepeatLimit(context.getSource(), IntegerArgumentType.getInteger(context, "maxPerMinute"),
+                                        RedEnvelopeService.getRepeatMinIntervalMs(context.getSource().getServer())))
+                                .then(Commands.argument("minIntervalMs", IntegerArgumentType.integer(0, 60000))
+                                        .executes(context -> setRepeatLimit(context.getSource(), IntegerArgumentType.getInteger(context, "maxPerMinute"),
+                                                IntegerArgumentType.getInteger(context, "minIntervalMs")))))));
     }
 
     private static int sendHand(CommandSourceStack source, int playerCount, String label) {
@@ -40,20 +53,17 @@ public class RedEnvelopeCommands {
             source.sendFailure(Component.translatable("red_envelope.error.player_only"));
             return 0;
         }
-
         ItemStack stack = player.getMainHandItem();
         if (stack.isEmpty()) {
             source.sendFailure(Component.translatable("red_envelope.error.empty_stack"));
             return 0;
         }
-
         ItemStack gift = stack.copy();
         SendRedEnvelopePayload payload = new SendRedEnvelopePayload(label, playerCount, true, true, SendRedEnvelopePayload.PropertyType.NORMAL, "");
         RedEnvelopeService.CreateResult result = RedEnvelopeService.create(player, gift, payload, false, false);
         if (result.created() && !player.getAbilities().instabuild) {
             stack.shrink(gift.getCount());
         }
-
         return result.created() ? 1 : 0;
     }
 
@@ -61,9 +71,8 @@ public class RedEnvelopeCommands {
         var data = RedEnvelopeService.getData(source.getServer());
         source.sendSuccess(() -> Component.translatable("red_envelope.history.header", data.envelopes.size()).withStyle(ChatFormatting.GOLD), false);
         data.envelopes.stream().sorted(Comparator.comparingLong((RedEnvelopeRecord record) -> record.createdGameTime).reversed()).limit(8)
-                .forEach(record -> source.sendSuccess(() -> Component.literal(
-                        "#" + record.id + " " + record.title + " " + record.status.getSerializedName()
-                                + " " + record.claims.size() + "/" + record.playerCount), false));
+                .forEach(record -> source.sendSuccess(() -> Component.literal("#" + record.id + " " + record.title + " " +
+                        record.status.getSerializedName() + " " + record.claims.size() + "/" + record.playerCount), false));
         return data.envelopes.size();
     }
 
@@ -76,6 +85,11 @@ public class RedEnvelopeCommands {
             return 0;
         }
         RedEnvelopeService.setPlayerLimit(executor, target, cooldownSeconds, blocked);
+        return 1;
+    }
+
+    private static int setRepeatLimit(CommandSourceStack source, int maxPerMinute, int minIntervalMs) {
+        RedEnvelopeService.setRepeatLimit(source, maxPerMinute, minIntervalMs);
         return 1;
     }
 }

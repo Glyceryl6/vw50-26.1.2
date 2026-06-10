@@ -4,10 +4,12 @@ import com.sqzj.vw50.client.menu.SendRedEnvelopeMenu;
 import com.sqzj.vw50.common.registry.VWItems;
 import com.sqzj.vw50.server.network.*;
 import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.transfer.item.ItemResource;
@@ -18,15 +20,26 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RedEnvelopeService {
 
     public static final int DEFAULT_SEND_COOLDOWN_TICKS = 20 * 30;
-    public static final int DEFAULT_REPEAT_MAX_PER_MINUTE = 6;
-    public static final int DEFAULT_REPEAT_MIN_INTERVAL_MS = 1200;
-
     private static final Map<UUID, Long> LAST_SEND_GAME_TIME = new ConcurrentHashMap<>();
     private static final Deque<QueuedClaim> CLAIM_QUEUE = new ArrayDeque<>();
-    private static final Random RANDOM = new Random();
+    private static final RandomSource RANDOM = RandomSource.create();
 
     public static RedEnvelopeSavedData getData(MinecraftServer server) {
         return server.getDataStorage().computeIfAbsent(RedEnvelopeSavedData.TYPE);
+    }
+
+    public static int getRepeatMaxPerMinute(MinecraftServer server) {
+        return Math.max(0, getData(server).repeatMaxPerMinute);
+    }
+
+    public static int getRepeatMinIntervalMs(MinecraftServer server) {
+        return Math.max(0, getData(server).repeatMinIntervalMs);
+    }
+
+    public static void setRepeatLimit(CommandSourceStack source, int maxPerMinute, int minIntervalMs) {
+        RedEnvelopeSavedData data = getData(source.getServer());
+        data.setRepeatLimit(maxPerMinute, minIntervalMs);
+        source.sendSuccess(() -> Component.translatable("repeat.limit.updated", data.repeatMaxPerMinute, data.repeatMinIntervalMs), true);
     }
 
     public static void createFromMenu(ServerPlayer player, SendRedEnvelopePayload payload) {
@@ -34,13 +47,13 @@ public class RedEnvelopeService {
             sendError(player, "red_envelope.error.no_menu");
             return;
         }
-        
+
         List<ItemStack> stacks = menu.giftSlot.copyToList().stream().filter(stack -> !stack.isEmpty()).toList();
         if (stacks.isEmpty()) {
             sendError(player, "red_envelope.error.empty_stack");
             return;
         }
-        
+
         ItemStack stack = stacks.getFirst().copy();
         CreateResult result = create(player, stack, payload, false, false);
         if (result.created()) {
@@ -81,27 +94,11 @@ public class RedEnvelopeService {
         String exclusive = payload.propertyType() == SendRedEnvelopePayload.PropertyType.EXCLUSIVE ? payload.propertyValue().trim() : "";
         List<String> visible = exclusive.isBlank() ? List.of() : List.of(exclusive);
         RedEnvelopeRecord record = new RedEnvelopeRecord(
-                player.getUUID(),
-                player.getGameProfile().name(),
-                title,
-                "",
-                stack,
-                stack.getCount(),
+                player.getUUID(), player.getGameProfile().name(), title, "", stack, stack.getCount(),
                 payload.propertyType() == SendRedEnvelopePayload.PropertyType.EXCLUSIVE ? 1 : payload.playerCount(),
-                payload.lucky(),
-                payload.returnWhenExpired(),
-                !password.isBlank(),
-                password,
-                exclusive,
-                false,
-                visible,
-                gameTime,
-                systemEnvelope);
-
-        if (!systemEnvelope) {
-            getData(server).addEnvelope(record);
-        }
-        
+                payload.lucky(), payload.returnWhenExpired(), !password.isBlank(),
+                password, exclusive, false, visible, gameTime, systemEnvelope);
+        if (!systemEnvelope) getData(server).addEnvelope(record);
         LAST_SEND_GAME_TIME.put(player.getUUID(), gameTime);
         broadcastEnvelope(server, record);
         player.sendSystemMessage(Component.translatable("red_envelope.sent", record.title).withStyle(ChatFormatting.GOLD), true);
@@ -118,14 +115,14 @@ public class RedEnvelopeService {
         if (payload.propertyType() == SendRedEnvelopePayload.PropertyType.PASSWORD && payload.propertyValue().startsWith("/")) {
             return Validation.fail("red_envelope.error.password_illegal");
         }
-
+        
         if (payload.propertyType() == SendRedEnvelopePayload.PropertyType.EXCLUSIVE) {
             String name = payload.propertyValue().trim();
             if (name.isBlank() || server.getPlayerList().getPlayerByName(name) == null) {
                 return Validation.fail("red_envelope.error.exclusive_offline");
             }
         }
-
+        
         return Validation.OK;
     }
 
@@ -152,7 +149,7 @@ public class RedEnvelopeService {
                 ready.add(claim);
             }
         }
-
+        
         if (ready.isEmpty()) return;
         Collections.shuffle(ready);
         QueuedClaim chosen = ready.removeFirst();
@@ -202,7 +199,7 @@ public class RedEnvelopeService {
         if (!player.getInventory().add(reward.copy())) {
             player.drop(reward, false);
         }
-
+        
         record.addClaim(player.getUUID(), player.getGameProfile().name(), amount, gameTime);
         data.setDirty();
         sendClaimResult(player, envelopeId, true, amount, "red_envelope.claim.success");
@@ -212,10 +209,7 @@ public class RedEnvelopeService {
     private static int calculateAmount(RedEnvelopeRecord record) {
         int remainingClaims = Math.max(1, record.remainingClaims());
         if (remainingClaims == 1) return Math.max(1, record.remainingAmount);
-        if (!record.lucky) {
-            return Math.max(1, record.remainingAmount / remainingClaims);
-        }
-
+        if (!record.lucky) return Math.max(1, record.remainingAmount / remainingClaims);
         int max = Math.max(1, (record.remainingAmount / remainingClaims) * 2);
         max = Math.min(max, record.remainingAmount - (remainingClaims - 1));
         return 1 + RANDOM.nextInt(Math.max(1, max));
@@ -235,7 +229,7 @@ public class RedEnvelopeService {
                         data.addPendingReturn(new PendingReturnRecord(record.senderUuid, record.senderName, returned, gameTime));
                     }
                 }
-
+                
                 data.setDirty();
                 syncEnvelope(server, record);
             }
@@ -264,7 +258,8 @@ public class RedEnvelopeService {
     public static void broadcastEnvelope(MinecraftServer server, RedEnvelopeRecord record) {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (record.isVisibleTo(player.getGameProfile().name())) {
-                PacketDistributor.sendToPlayer(player, new RedEnvelopeSyncPayload(List.of(RedEnvelopeSnapshot.of(record, player.getUUID(), server.overworld().getGameTime())), false));
+                PacketDistributor.sendToPlayer(player, new RedEnvelopeSyncPayload(List.of(
+                        RedEnvelopeSnapshot.of(record, player.getUUID(), server.overworld().getGameTime())), false));
             }
         }
     }
@@ -273,17 +268,15 @@ public class RedEnvelopeService {
         broadcastEnvelope(server, record);
     }
 
-    public static boolean tryPasswordClaim(ServerPlayer player, String rawText) {
+    public static void tryPasswordClaim(ServerPlayer player, String rawText) {
         MinecraftServer server = player.server;
         long gameTime = server.overworld().getGameTime();
         for (RedEnvelopeRecord record : getData(server).envelopes) {
             if (record.isActive(gameTime) && record.usePassword && record.password.equals(rawText) && record.isVisibleTo(player.getGameProfile().name())) {
                 queueClaim(player, record.id, true);
-                return true;
+                return;
             }
         }
-        
-        return false;
     }
 
     private static void sendClaimResult(ServerPlayer player, UUID id, boolean success, int amount, String translationKey) {
