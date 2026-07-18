@@ -8,6 +8,7 @@ public final class GuiMessageExtraData {
 
     public boolean canPlusOne;
     public boolean isRedEnvelope;
+    public boolean isRedEnvelopeFinishNotice;
     public String repeatText;
     public UUID redEnvelopeId;
     public RedEnvelopeSnapshot redEnvelopeSnapshot;
@@ -20,6 +21,7 @@ public final class GuiMessageExtraData {
     public GuiMessageExtraData(boolean canPlusOne, boolean isRedEnvelope) {
         this.canPlusOne = canPlusOne;
         this.isRedEnvelope = isRedEnvelope;
+        this.isRedEnvelopeFinishNotice = false;
         this.repeatText = "";
         this.redEnvelopeId = null;
         this.redEnvelopeSnapshot = null;
@@ -32,6 +34,14 @@ public final class GuiMessageExtraData {
 
     public static GuiMessageExtraData redEnvelope(RedEnvelopeSnapshot snapshot) {
         GuiMessageExtraData data = new GuiMessageExtraData(false, true);
+        data.redEnvelopeId = snapshot.id();
+        data.redEnvelopeSnapshot = snapshot;
+        return data;
+    }
+
+    public static GuiMessageExtraData finishNotice(RedEnvelopeSnapshot snapshot) {
+        GuiMessageExtraData data = new GuiMessageExtraData(false, false);
+        data.isRedEnvelopeFinishNotice = true;
         data.redEnvelopeId = snapshot.id();
         data.redEnvelopeSnapshot = snapshot;
         return data;

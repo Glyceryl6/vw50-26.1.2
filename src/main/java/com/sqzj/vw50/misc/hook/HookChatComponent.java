@@ -3,16 +3,19 @@ package com.sqzj.vw50.misc.hook;
 import com.mojang.blaze3d.platform.cursor.CursorType;
 import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import com.sqzj.vw50.VW50;
+import com.sqzj.vw50.client.ClientRedEnvelopeManager;
 import com.sqzj.vw50.api.IChatComponentExtensions;
 import com.sqzj.vw50.common.envelope.RedEnvelopeStatus;
 import com.sqzj.vw50.misc.GuiMessageAttachment;
 import com.sqzj.vw50.misc.GuiMessageExtraData;
+import com.sqzj.vw50.server.network.ClaimSnapshot;
 import com.sqzj.vw50.server.network.RedEnvelopeSnapshot;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ActiveTextCollector;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.TextAlignment;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.components.WidgetSprites;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -24,8 +27,11 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.PlayerSkin;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.util.Mth;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.nio.charset.StandardCharsets;
@@ -56,6 +62,8 @@ public class HookChatComponent {
     private static final int CARD_DETAIL_GAP = 2;
     private static final int CARD_TEXT_LEFT_OFFSET = 30;
     private static final int CARD_RIGHT_PADDING = 8;
+    private static final int CLAIM_PANEL_WIDTH = 232;
+    private static final int CLAIM_PANEL_ROW_HEIGHT = 14;
     private static final int EXCLUSIVE_FACE_SIZE = 8;
     private static final int EXCLUSIVE_FACE_GAP = 12;
     private static final Pattern VANILLA_PLAYER_MESSAGE = Pattern.compile("^<[^>]+>\\s*(.*)$");
@@ -111,8 +119,7 @@ public class HookChatComponent {
     public record RedEnvelopeLayout(boolean wrapped, int cardWidth, int cardHeight, int totalHeight, int placeholderLines) { }
 
     private static RedEnvelopeLayout layoutFromExtra(GuiMessageExtraData extraData) {
-        return new RedEnvelopeLayout(
-                extraData.redEnvelopeWrapped,
+        return new RedEnvelopeLayout(extraData.redEnvelopeWrapped,
                 Math.max(60, extraData.redEnvelopeCardWidth),
                 Math.max(RED_ENV_MIN_HEIGHT, extraData.redEnvelopeCardHeight),
                 Math.max(RED_ENV_MIN_HEIGHT, extraData.redEnvelopeTotalHeight),
@@ -120,7 +127,7 @@ public class HookChatComponent {
     }
 
     private static int getEntryHeight(double chatLineSpacing) {
-        return (int)Math.floor(VANILLA_MESSAGE_HEIGHT * (chatLineSpacing + 1.0F));
+        return (int) Math.floor(VANILLA_MESSAGE_HEIGHT * (chatLineSpacing + 1.0F));
     }
 
     private static int getTextTop(int chatBottom, int lineIndex, int entryHeight, double chatLineSpacing) {
@@ -145,16 +152,22 @@ public class HookChatComponent {
         RedEnvelopeSnapshot snapshot = extraData.redEnvelopeSnapshot;
         boolean inactive = snapshot != null && snapshot.status() != RedEnvelopeStatus.ACTIVE;
         int alphaWhite = ARGB.white(parameters.opacity());
-        int border = applyOpacity(hovered ? 0xFFFFD27A : 0xFFFFB24A, parameters.opacity());
-        int body = applyOpacity(inactive ? 0xFF8A5C4A : 0xFFC83F2D, parameters.opacity());
-        int body2 = applyOpacity(inactive ? 0xFF5D443C : 0xFF9D231C, parameters.opacity());
+        int baseColor = snapshot == null ? RedEnvelopeSnapshot.DEFAULT_CARD_COLOR : snapshot.cardColor();
+        int border = applyOpacity(hovered ? 0xFFFFD27A : lighten(baseColor, 46), parameters.opacity());
+        int body = applyOpacity(inactive ? desaturate(baseColor) : baseColor, parameters.opacity());
+        int body2 = applyOpacity(inactive ? darken(desaturate(baseColor), 42) : darken(baseColor, 40), parameters.opacity());
         graphics.fill(left, top, left + width, top + height, body);
         graphics.fill(left + 2, top + 2, left + width - 2, top + height - 2, body2);
         graphics.fill(left, top, left + width, top + 1, border);
         graphics.fill(left, top + height - 1, left + width, top + height, border);
         int iconY = top + Math.max(8, (height - 16) / 2);
-        graphics.blit(RenderPipelines.GUI_TEXTURED, RED_ENV_COMPONENT_LOCATION, left + 8, iconY,
-                0.0F, 0.0F, 16, 16, 16, 16, alphaWhite);
+        ItemStack iconStack = getIconStack(snapshot);
+        if (!iconStack.isEmpty()) {
+            graphics.fakeItem(iconStack, left + 8, iconY);
+        } else {
+            graphics.blit(RenderPipelines.GUI_TEXTURED, RED_ENV_COMPONENT_LOCATION, left + 8, iconY, 0.0F, 0.0F, 16, 16, 16, 16, alphaWhite);
+        }
+
         int textLeft = left + CARD_TEXT_LEFT_OFFSET;
         int textWidth = Math.max(20, width - CARD_TEXT_LEFT_OFFSET - CARD_RIGHT_PADDING);
         int y = top + CARD_VERTICAL_PADDING;
@@ -180,19 +193,23 @@ public class HookChatComponent {
             drawWrapped(textRenderer, parameters, textLeft, y, textWidth, Component.translatable("red_envelope.chat.click").getString(), ChatFormatting.YELLOW);
             return;
         }
+
         if (snapshot.status() != RedEnvelopeStatus.ACTIVE) {
             drawWrapped(textRenderer, parameters, textLeft, y, textWidth, Component.translatable("red_envelope.chat.finished").getString(), ChatFormatting.DARK_GRAY);
             return;
         }
+
         if (snapshot.viewerClaimed()) {
             drawWrapped(textRenderer, parameters, textLeft, y, textWidth, Component.translatable("red_envelope.chat.claimed", snapshot.claimedCount(), snapshot.playerCount()).getString(), ChatFormatting.GRAY);
             return;
         }
+
         if (snapshot.usePassword()) {
             String password = snapshot.password().isBlank() ? "?" : snapshot.password();
             drawWrapped(textRenderer, parameters, textLeft, y, textWidth, Component.translatable("red_envelope.chat.copy_password", password).getString(), ChatFormatting.YELLOW);
             return;
         }
+
         if (!snapshot.exclusiveUser().isBlank()) {
             graphics.fill(textLeft - 1, y - 1, textLeft + EXCLUSIVE_FACE_SIZE + 1, y + EXCLUSIVE_FACE_SIZE + 1, applyOpacity(0xFFFFD27A, parameters.opacity()));
             renderPlayerHead(graphics, snapshot.exclusiveUser(), textLeft, y, alphaWhite);
@@ -201,6 +218,47 @@ public class HookChatComponent {
         }
 
         drawWrapped(textRenderer, parameters, textLeft, y, textWidth, Component.translatable("red_envelope.chat.click", snapshot.claimedCount(), snapshot.playerCount()).getString(), ChatFormatting.YELLOW);
+    }
+
+    public static void renderClaimListPanel(ChatComponent.DrawingFocusedGraphicsAccess access, int chatBottom, float textOpacity) {
+        ClientRedEnvelopeManager.getSelectedClaimListSnapshot().ifPresent(snapshot -> {
+            int rowCount = Math.max(1, snapshot.claims().size());
+            int width = Math.clamp(Minecraft.getInstance().gui.getChat().getWidth(), 140, CLAIM_PANEL_WIDTH);
+            int height = 25 + rowCount * CLAIM_PANEL_ROW_HEIGHT + 8;
+            int left = RED_ENV_LEFT;
+            int top = Math.max(8, chatBottom - height - 92);
+            GuiGraphicsExtractor graphics = access.graphics;
+            ActiveTextCollector textRenderer = access.textRenderer;
+            ActiveTextCollector.Parameters parameters = access.parameters.withOpacity(textOpacity);
+            int body = applyOpacity(0xFFD24635, textOpacity);
+            int inner = applyOpacity(0xFF8E211A, textOpacity);
+            int border = applyOpacity(0xFFFFD27A, textOpacity);
+            graphics.fill(left, top, left + width, top + height, body);
+            graphics.fill(left + 2, top + 2, left + width - 2, top + height - 2, inner);
+            graphics.outline(left, top, width, height, border);
+            textRenderer.accept(TextAlignment.LEFT, left + 8, top + 7, parameters, Component.translatable("red_envelope.claim_list.title", snapshot.title()).withStyle(ChatFormatting.GOLD));
+            int closeX = left + width - 16;
+            int closeY = top + 6;
+            boolean closeHover = access.isMouseOver(closeX - 2, closeY - 2, closeX + 10, closeY + 10);
+            textRenderer.accept(TextAlignment.LEFT, closeX, closeY, parameters, Component.literal("×").withStyle(closeHover ? ChatFormatting.WHITE : ChatFormatting.GRAY));
+            if (closeHover) {
+                access.graphics.requestCursor(CursorTypes.POINTING_HAND);
+                ClientRedEnvelopeManager.setMouseOverClaimPanelClose(true);
+            }
+
+            int y = top + 22;
+            for (ClaimSnapshot claim : snapshot.claims()) {
+                renderPlayerHead(graphics, claim.playerName(), left + 8, y + 2, ARGB.white(textOpacity));
+                textRenderer.accept(TextAlignment.LEFT, left + 22, y + 2, parameters, Component.literal(claim.playerName()).withStyle(ChatFormatting.WHITE));
+                String amount = Component.translatable("red_envelope.claim_list.amount", claim.amount()).getString();
+                textRenderer.accept(TextAlignment.LEFT, left + width - 8 - Minecraft.getInstance().font.width(amount), y + 2, parameters, Component.literal(amount).withStyle(ChatFormatting.YELLOW));
+                y += CLAIM_PANEL_ROW_HEIGHT;
+            }
+
+            if (snapshot.claims().isEmpty()) {
+                textRenderer.accept(TextAlignment.LEFT, left + 8, y + 2, parameters, Component.translatable("red_envelope.claim_list.empty").withStyle(ChatFormatting.GRAY));
+            }
+        });
     }
 
     private static void drawWrapped(ActiveTextCollector textRenderer, ActiveTextCollector.Parameters parameters, int x, int y, int width, String text, ChatFormatting formatting) {
@@ -286,6 +344,58 @@ public class HookChatComponent {
         return Component.translatable("red_envelope.chat.click", snapshot.claimedCount(), snapshot.playerCount()).getString();
     }
 
+
+    public static ItemStack getIconStack(RedEnvelopeSnapshot snapshot) {
+        String rawId = snapshot == null ? RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID : snapshot.iconItemId();
+        Identifier id = Identifier.tryParse(rawId == null || rawId.isBlank() ? RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID : rawId);
+        if (id == null) return ItemStack.EMPTY;
+        Item item = BuiltInRegistries.ITEM.getValue(id);
+        if (item == Items.AIR) return ItemStack.EMPTY;
+        return new ItemStack(item);
+    }
+
+    public static int parseColorOrDefault(String value, int fallback) {
+        if (value == null || value.isBlank()) return fallback;
+        String raw = value.trim();
+        if (raw.startsWith("#")) raw = raw.substring(1);
+        if (raw.startsWith("0x") || raw.startsWith("0X")) raw = raw.substring(2);
+        try {
+            int rgb = (int)Long.parseLong(raw, 16);
+            return (rgb & 0xFF000000) == 0 ? 0xFF000000 | (rgb & 0x00FFFFFF) : rgb;
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    public static String colorToHex(int color) {
+        return String.format("#%06X", color & 0x00FFFFFF);
+    }
+
+    private static int darken(int argb, int amount) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = Math.max(0, ((argb >>> 16) & 0xFF) - amount);
+        int g = Math.max(0, ((argb >>> 8) & 0xFF) - amount);
+        int b = Math.max(0, (argb & 0xFF) - amount);
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int lighten(int argb, int amount) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = Math.min(255, ((argb >>> 16) & 0xFF) + amount);
+        int g = Math.min(255, ((argb >>> 8) & 0xFF) + amount);
+        int b = Math.min(255, (argb & 0xFF) + amount);
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int desaturate(int argb) {
+        int a = (argb >>> 24) & 0xFF;
+        int r = (argb >>> 16) & 0xFF;
+        int g = (argb >>> 8) & 0xFF;
+        int b = argb & 0xFF;
+        int gray = (r + g + b) / 3;
+        return (a << 24) | (((r + gray) / 2) << 16) | (((g + gray) / 2) << 8) | ((b + gray) / 2);
+    }
+
     private static void renderPlayerHead(GuiGraphicsExtractor graphics, String playerName, int x, int y, int alphaWhite) {
         Identifier skin = getPlayerSkin(playerName).body().texturePath();
         graphics.blit(RenderPipelines.GUI_TEXTURED, skin, x, y, 8.0F, 8.0F, 8, 8, 64, 64, alphaWhite);
@@ -298,6 +408,7 @@ public class HookChatComponent {
             PlayerInfo info = minecraft.getConnection().getPlayerInfo(playerName);
             if (info != null) return info.getSkin();
         }
+
         UUID fallback = UUID.nameUUIDFromBytes(("OfflinePlayer:" + playerName).getBytes(StandardCharsets.UTF_8));
         return DefaultPlayerSkin.get(fallback);
     }
@@ -319,6 +430,16 @@ public class HookChatComponent {
             if (extraData != null && !extraData.isRedEnvelope && chat instanceof IChatComponentExtensions extensions) {
                 Minecraft minecraft = Minecraft.getInstance();
                 GuiGraphicsExtractor graphics = access.graphics;
+                if (extraData.isRedEnvelopeFinishNotice && line.endOfEntry() && extraData.redEnvelopeId != null) {
+                    int width = Math.min(minecraft.font.width(line.content()), minecraft.gui.getChat().getWidth());
+                    boolean isMouseOver = access.isMouseOver(RED_ENV_LEFT, textTop, RED_ENV_LEFT + Math.max(40, width), textTop + VANILLA_MESSAGE_HEIGHT);
+                    if (isMouseOver) {
+                        graphics.requestCursor(CursorTypes.POINTING_HAND);
+                        extensions.VW50$setMouseOverRedEnvelope(true);
+                        extensions.VW50$setMouseOverRedEnvelopeId(extraData.redEnvelopeId);
+                    }
+                }
+
                 int iconLeft = line.getTagIconLeft(minecraft.font);
                 if (extraData.canPlusOne && line.endOfEntry()) {
                     final int messageHeight = 9, iconSize = 9;
@@ -352,6 +473,7 @@ public class HookChatComponent {
                 return false;
             }
         }
+
         return false;
     }
 

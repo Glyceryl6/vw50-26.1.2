@@ -1,9 +1,11 @@
 package com.sqzj.vw50.client;
 
+import com.sqzj.vw50.common.envelope.RedEnvelopeStatus;
 import com.sqzj.vw50.misc.GuiMessageAttachment;
 import com.sqzj.vw50.misc.GuiMessageExtraData;
 import com.sqzj.vw50.misc.hook.HookChatComponent;
 import com.sqzj.vw50.server.network.ClaimResultPayload;
+import com.sqzj.vw50.server.network.ClaimSnapshot;
 import com.sqzj.vw50.server.network.RedEnvelopeSnapshot;
 import com.sqzj.vw50.server.network.RedEnvelopeSyncPayload;
 import net.minecraft.ChatFormatting;
@@ -17,14 +19,17 @@ import net.minecraft.network.chat.MutableComponent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 import org.jspecify.annotations.Nullable;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
-public class ClientRedEnvelopeManager {
+public final class ClientRedEnvelopeManager {
 
     private static final Map<UUID, GuiMessage> CHAT_MESSAGES = new HashMap<>();
     private static final Map<UUID, RedEnvelopeSnapshot> SNAPSHOTS = new HashMap<>();
+    private static final Set<UUID> FINISH_NOTICES = new HashSet<>();
+    @Nullable
+    private static UUID selectedClaimListId = null;
+    private static boolean mouseOverClaimPanelClose = false;
 
     public static void handleSync(RedEnvelopeSyncPayload payload, IPayloadContext context) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -32,11 +37,16 @@ public class ClientRedEnvelopeManager {
         if (payload.clearOld()) {
             CHAT_MESSAGES.clear();
             SNAPSHOTS.clear();
+            FINISH_NOTICES.clear();
+            selectedClaimListId = null;
         }
 
         for (RedEnvelopeSnapshot snapshot : payload.envelopes()) {
-            SNAPSHOTS.put(snapshot.id(), snapshot);
+            RedEnvelopeSnapshot old = SNAPSHOTS.put(snapshot.id(), snapshot);
             addOrUpdateChatMessage(minecraft, snapshot);
+            if (snapshot.lucky() && snapshot.status() == RedEnvelopeStatus.FINISHED && (old == null || old.status() == RedEnvelopeStatus.ACTIVE)) {
+                addFinishNotice(minecraft, snapshot);
+            }
         }
     }
 
@@ -52,13 +62,36 @@ public class ClientRedEnvelopeManager {
         return SNAPSHOTS.get(id);
     }
 
+    public static Optional<RedEnvelopeSnapshot> getSelectedClaimListSnapshot() {
+        return selectedClaimListId == null ? Optional.empty() : Optional.ofNullable(SNAPSHOTS.get(selectedClaimListId));
+    }
+
+    public static void toggleClaimList(UUID id) {
+        selectedClaimListId = Objects.equals(selectedClaimListId, id) ? null : id;
+    }
+
+    public static void closeClaimList() {
+        selectedClaimListId = null;
+    }
+
+    public static boolean isMouseOverClaimPanelClose() {
+        return mouseOverClaimPanelClose;
+    }
+
+    public static void setMouseOverClaimPanelClose(boolean value) {
+        mouseOverClaimPanelClose = value;
+    }
+
+    public static List<ClaimSnapshot> getLuckiestClaims(RedEnvelopeSnapshot snapshot) {
+        int max = snapshot.claims().stream().mapToInt(ClaimSnapshot::amount).max().orElse(0);
+        if (max <= 0) return List.of();
+        return snapshot.claims().stream().filter(claim -> claim.amount() == max).toList();
+    }
+
     private static Component makeChatContent(RedEnvelopeSnapshot snapshot, HookChatComponent.RedEnvelopeLayout layout) {
         String sender = snapshot.senderName().isBlank() ? "Server" : snapshot.senderName();
         String label = Component.translatable("red_envelope.chat.card_title").getString();
         StringBuilder builder = new StringBuilder();
-        // Keep a short, readable log entry, but reserve the visible height using
-        // controlled blank lines so long titles/passwords do not make vanilla chat
-        // wrap unpredictably before VW50 draws the card.
         builder.append("<").append(sender).append("> [").append(label).append("]");
         int lines = Math.max(1, layout.placeholderLines());
         for (int i = 1; i < lines; i++) {
@@ -100,6 +133,28 @@ public class ClientRedEnvelopeManager {
             chat.logChatMessage(message);
             chat.addMessageToDisplayQueue(message);
         }
+    }
+
+    private static void addFinishNotice(Minecraft minecraft, RedEnvelopeSnapshot snapshot) {
+        if (!FINISH_NOTICES.add(snapshot.id())) return;
+        ChatComponent chat = minecraft.gui.getChat();
+        String luckiest = getLuckiestClaims(snapshot).stream().map(ClaimSnapshot::playerName).collect(Collectors.joining("、"));
+        Component content = Component.translatable("red_envelope.luck_king.notice", snapshot.title(), formatDuration(snapshot.elapsedTicks()), luckiest);
+        GuiMessage message = new GuiMessage(minecraft.gui.getGuiTicks(), content, null, GuiMessageSource.SYSTEM_SERVER, GuiMessageTag.systemSinglePlayer());
+        GuiMessageExtraData data = GuiMessageExtraData.finishNotice(snapshot);
+        GuiMessageAttachment.put(message, data);
+        if (chat.visibleMessageFilter.test(message)) {
+            chat.logChatMessage(message);
+            chat.addMessageToDisplayQueue(message);
+        }
+    }
+
+    private static String formatDuration(int ticks) {
+        int seconds = Math.max(0, (ticks + 19) / 20);
+        int minutes = seconds / 60;
+        int remain = seconds % 60;
+        if (minutes <= 0) return Component.translatable("red_envelope.duration.seconds", remain).getString();
+        return Component.translatable("red_envelope.duration.minutes_seconds", minutes, remain).getString();
     }
 
 }

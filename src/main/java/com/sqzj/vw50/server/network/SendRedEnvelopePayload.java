@@ -11,10 +11,17 @@ public record SendRedEnvelopePayload(
         boolean lucky,
         boolean returnWhenExpired,
         PropertyType propertyType,
-        String propertyValue) implements CustomPacketPayload {
+        String propertyValue,
+        String iconItemId,
+        int cardColor) implements CustomPacketPayload {
 
     public static final Type<SendRedEnvelopePayload> TYPE = new Type<>(VW50.prefix("send_red_envelope"));
     public static final StreamCodec<RegistryFriendlyByteBuf, SendRedEnvelopePayload> STREAM_CODEC = StreamCodec.ofMember(SendRedEnvelopePayload::encode, SendRedEnvelopePayload::decode);
+
+    public static SendRedEnvelopePayload basic(String title, int playerCount, boolean lucky, boolean returnWhenExpired, PropertyType propertyType, String propertyValue) {
+        return new SendRedEnvelopePayload(title, playerCount, lucky, returnWhenExpired, propertyType, propertyValue,
+                RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID, RedEnvelopeSnapshot.DEFAULT_CARD_COLOR);
+    }
 
     public static SendRedEnvelopePayload decode(RegistryFriendlyByteBuf buf) {
         return new SendRedEnvelopePayload(
@@ -23,7 +30,10 @@ public record SendRedEnvelopePayload(
                 buf.readBoolean(),
                 buf.readBoolean(),
                 PropertyType.values()[buf.readVarInt()],
-                buf.readUtf(64));
+                buf.readUtf(64),
+                buf.readUtf(128),
+                buf.readInt()
+        );
     }
 
     public void encode(RegistryFriendlyByteBuf buf) {
@@ -33,6 +43,8 @@ public record SendRedEnvelopePayload(
         buf.writeBoolean(this.returnWhenExpired);
         buf.writeVarInt(this.propertyType.ordinal());
         buf.writeUtf(this.propertyValue, 64);
+        buf.writeUtf(this.iconItemId == null || this.iconItemId.isBlank() ? RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID : this.iconItemId, 128);
+        buf.writeInt(this.cardColor);
     }
 
     @Override

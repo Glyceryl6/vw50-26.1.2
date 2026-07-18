@@ -2,6 +2,7 @@ package com.sqzj.vw50.mixin;
 
 import com.llamalad7.mixinextras.sugar.Local;
 import com.sqzj.vw50.api.IChatComponentExtensions;
+import com.sqzj.vw50.client.ClientRedEnvelopeManager;
 import com.sqzj.vw50.misc.GuiMessageAttachment;
 import com.sqzj.vw50.misc.GuiMessageExtraData;
 import com.sqzj.vw50.misc.hook.HookChatComponent;
@@ -10,7 +11,6 @@ import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.multiplayer.chat.*;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MessageSignature;
-import net.minecraft.util.*;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.*;
@@ -32,6 +32,7 @@ public abstract class MixinChatComponent implements IChatComponentExtensions {
     @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/components/ChatComponent$ChatGraphicsAccess;IILnet/minecraft/client/gui/components/ChatComponent$DisplayMode;)V", at = @At(value = "HEAD"))
     private void extractRenderState(ChatComponent.ChatGraphicsAccess graphics, int screenHeight, int ticks, ChatComponent.DisplayMode displayMode, CallbackInfo ci) {
         HookChatComponent.chatGraphicsAccess = graphics;
+        ClientRedEnvelopeManager.setMouseOverClaimPanelClose(false);
         this.VW50$mouseOverRepeatButton = false;
         this.VW50$mouseOverRedEnvelope = false;
         this.VW50$mouseOverRedEnvelopeId = null;
@@ -47,6 +48,16 @@ public abstract class MixinChatComponent implements IChatComponentExtensions {
             // per-line background, otherwise the reserved blank lines produce black bars
             // and the card appears to block adjacent normal chat messages.
             ci.cancel();
+        }
+    }
+
+    @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/components/ChatComponent$ChatGraphicsAccess;IILnet/minecraft/client/gui/components/ChatComponent$DisplayMode;)V",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/components/ChatComponent;forEachLine(Lnet/minecraft/client/gui/components/ChatComponent$AlphaCalculator;Lnet/minecraft/client/gui/components/ChatComponent$LineConsumer;)I", shift = At.Shift.AFTER))
+    private void extractRenderState(ChatComponent.ChatGraphicsAccess graphics, int screenHeight, int ticks, ChatComponent.DisplayMode displayMode, CallbackInfo ci, @Local(name = "chatBottom") int chatBottom, @Local(name = "textOpacity") float textOpacity) {
+        // Red-envelope cards are drawn from the actual GuiMessage.Line callback so they
+        // scroll, fade and clip exactly like the vanilla chat entry that owns them.
+        if (graphics instanceof ChatComponent.DrawingFocusedGraphicsAccess access) {
+            HookChatComponent.renderClaimListPanel(access, chatBottom, textOpacity);
         }
     }
 
@@ -98,7 +109,6 @@ public abstract class MixinChatComponent implements IChatComponentExtensions {
         this.VW50$mouseOverRedEnvelope = value;
     }
 
-    @Nullable
     @Override
     public UUID VW50$getMouseOverRedEnvelopeId() {
         return this.VW50$mouseOverRedEnvelopeId;

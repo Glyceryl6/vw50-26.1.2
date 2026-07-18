@@ -2,6 +2,7 @@ package com.sqzj.vw50.common.envelope;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.sqzj.vw50.server.network.RedEnvelopeSnapshot;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.world.item.ItemStack;
 
@@ -26,6 +27,8 @@ public class RedEnvelopeRecord {
     public String title;
     public String sign;
     public ItemStack stackPrototype;
+    public String iconItemId;
+    public int cardColor;
     public int totalAmount;
     public int remainingAmount;
     public int playerCount;
@@ -49,6 +52,8 @@ public class RedEnvelopeRecord {
         this.title = base.title();
         this.sign = base.sign();
         this.stackPrototype = base.stackPrototype().copyWithCount(1);
+        this.iconItemId = sanitizeIcon(base.iconItemId());
+        this.cardColor = base.cardColor();
         this.systemEnvelope = base.systemEnvelope();
         this.playerCount = options.playerCount();
         this.lucky = options.lucky();
@@ -72,6 +77,8 @@ public class RedEnvelopeRecord {
             String title,
             String sign,
             ItemStack stackPrototype,
+            String iconItemId,
+            int cardColor,
             int totalAmount,
             int playerCount,
             boolean lucky,
@@ -83,13 +90,13 @@ public class RedEnvelopeRecord {
             List<String> visiblePlayers,
             long createdGameTime,
             boolean systemEnvelope) {
-        this(new Base(UUID.randomUUID(), senderUuid, senderName, title, sign, stackPrototype, systemEnvelope),
+        this(new Base(UUID.randomUUID(), senderUuid, senderName, title, sign, stackPrototype, sanitizeIcon(iconItemId), cardColor, systemEnvelope),
                 new Options(playerCount, lucky, returnWhenExpired, usePassword, emptyToOptional(password), emptyToOptional(exclusiveUser), hidden, visiblePlayers),
                 new State(totalAmount, totalAmount, RedEnvelopeStatus.ACTIVE, createdGameTime, createdGameTime + DEFAULT_EXPIRE_TICKS, List.of()));
     }
 
     private Base base() {
-        return new Base(this.id, this.senderUuid, this.senderName, this.title, this.sign, this.stackPrototype, this.systemEnvelope);
+        return new Base(this.id, this.senderUuid, this.senderName, this.title, this.sign, this.stackPrototype, sanitizeIcon(this.iconItemId), this.cardColor, this.systemEnvelope);
     }
 
     private Options options() {
@@ -132,11 +139,21 @@ public class RedEnvelopeRecord {
         }
     }
 
+    public List<ClaimRecord> luckiestClaims() {
+        int max = this.claims.stream().mapToInt(ClaimRecord::amount).max().orElse(0);
+        if (max <= 0) return List.of();
+        return this.claims.stream().filter(claim -> claim.amount() == max).toList();
+    }
+
     public static Optional<String> emptyToOptional(String value) {
         return value == null || value.isBlank() ? Optional.empty() : Optional.of(value);
     }
 
-    public record Base(UUID id, UUID senderUuid, String senderName, String title, String sign, ItemStack stackPrototype, boolean systemEnvelope) {
+    private static String sanitizeIcon(String iconItemId) {
+        return iconItemId == null || iconItemId.isBlank() ? RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID : iconItemId;
+    }
+
+    private record Base(UUID id, UUID senderUuid, String senderName, String title, String sign, ItemStack stackPrototype, String iconItemId, int cardColor, boolean systemEnvelope) {
         private static final Codec<Base> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 UUIDUtil.CODEC.fieldOf("id").forGetter(Base::id),
                 UUIDUtil.CODEC.fieldOf("sender_uuid").forGetter(Base::senderUuid),
@@ -144,11 +161,13 @@ public class RedEnvelopeRecord {
                 Codec.STRING.fieldOf("title").forGetter(Base::title),
                 Codec.STRING.fieldOf("sign").forGetter(Base::sign),
                 ItemStack.CODEC.fieldOf("stack_prototype").forGetter(Base::stackPrototype),
+                Codec.STRING.optionalFieldOf("icon_item_id", RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID).forGetter(Base::iconItemId),
+                Codec.INT.optionalFieldOf("card_color", RedEnvelopeSnapshot.DEFAULT_CARD_COLOR).forGetter(Base::cardColor),
                 Codec.BOOL.fieldOf("system_envelope").forGetter(Base::systemEnvelope)
         ).apply(instance, Base::new));
     }
 
-    public record Options(int playerCount, boolean lucky, boolean returnWhenExpired, boolean usePassword, Optional<String> password, Optional<String> exclusiveUser, boolean hidden, List<String> visiblePlayers) {
+    private record Options(int playerCount, boolean lucky, boolean returnWhenExpired, boolean usePassword, Optional<String> password, Optional<String> exclusiveUser, boolean hidden, List<String> visiblePlayers) {
         private static final Codec<Options> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.fieldOf("player_count").forGetter(Options::playerCount),
                 Codec.BOOL.fieldOf("lucky").forGetter(Options::lucky),
@@ -161,7 +180,7 @@ public class RedEnvelopeRecord {
         ).apply(instance, Options::new));
     }
 
-    public record State(int totalAmount, int remainingAmount, RedEnvelopeStatus status, long createdGameTime, long expireGameTime, List<ClaimRecord> claims) {
+    private record State(int totalAmount, int remainingAmount, RedEnvelopeStatus status, long createdGameTime, long expireGameTime, List<ClaimRecord> claims) {
         private static final Codec<State> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 Codec.INT.fieldOf("total_amount").forGetter(State::totalAmount),
                 Codec.INT.fieldOf("remaining_amount").forGetter(State::remainingAmount),
@@ -171,5 +190,4 @@ public class RedEnvelopeRecord {
                 ClaimRecord.CODEC.listOf().fieldOf("claims").forGetter(State::claims)
         ).apply(instance, State::new));
     }
-
 }
