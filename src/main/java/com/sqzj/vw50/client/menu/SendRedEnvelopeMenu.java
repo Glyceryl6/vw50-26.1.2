@@ -25,8 +25,8 @@ public class SendRedEnvelopeMenu extends AbstractContainerMenu {
 
     public SendRedEnvelopeMenu(int containerId, Inventory inventory, UUID senderUuid) {
         super(VWMenus.SEND_RED_ENVELOPE_MENU.get(), containerId);
-        this.addSlot(new ResourceHandlerSlot(this.giftSlot, this.giftSlot::set, 0, 81, 42));
-        this.addStandardInventorySlots(inventory, 9, 107);
+        this.addSlot(new ResourceHandlerSlot(this.giftSlot, this.giftSlot::set, 0, 96, 42));
+        this.addStandardInventorySlots(inventory, 24, 149);
         this.senderUuid = senderUuid;
     }
 
