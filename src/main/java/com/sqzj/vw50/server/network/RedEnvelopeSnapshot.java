@@ -1,9 +1,10 @@
 package com.sqzj.vw50.server.network;
 
+import com.sqzj.vw50.common.envelope.RedEnvelopeStyleOptions;
 import com.sqzj.vw50.common.envelope.RedEnvelopeRecord;
 import com.sqzj.vw50.common.envelope.RedEnvelopeStatus;
 import net.minecraft.network.RegistryFriendlyByteBuf;
-import org.jspecify.annotations.Nullable;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,21 +27,27 @@ public record RedEnvelopeSnapshot(
         int remainingTicks,
         int elapsedTicks,
         boolean lucky,
-        @Nullable String iconItemId,
+        Identifier iconIdentifier,
         int cardColor,
         List<ClaimSnapshot> claims,
         RedEnvelopeStatus status) {
 
-    public static final String DEFAULT_ICON_ITEM_ID = "vw50:empty_red_envelope";
+    public static final Identifier DEFAULT_ICON_IDENTIFIER = RedEnvelopeStyleOptions.DEFAULT_ICON_IDENTIFIER;
     public static final int DEFAULT_CARD_COLOR = 0xFFC83F2D;
+
+    public RedEnvelopeSnapshot {
+        iconIdentifier = RedEnvelopeStyleOptions.normalizeIconIdentifier(iconIdentifier);
+        claims = List.copyOf(claims);
+    }
 
     public static RedEnvelopeSnapshot of(RedEnvelopeRecord record, UUID viewerUuid, long gameTime) {
         int remainingTicks = (int)Math.max(0, record.expireGameTime - gameTime);
         int elapsedTicks = (int)Math.max(0, Math.min(gameTime, record.expireGameTime) - record.createdGameTime);
         List<ClaimSnapshot> claims = record.claims.stream().map(ClaimSnapshot::of).toList();
         return new RedEnvelopeSnapshot(record.id, record.title, record.sign, record.senderName, record.exclusiveUser,
-                record.usePassword, record.password, record.hidden, record.hasClaimed(viewerUuid), record.remainingAmount, record.totalAmount, record.playerCount,
-                record.claims.size(), remainingTicks, elapsedTicks, record.lucky, record.iconItemId, record.cardColor, claims, record.status);
+                record.usePassword, record.password, record.hidden, record.hasClaimed(viewerUuid), record.remainingAmount,
+                record.totalAmount, record.playerCount, record.claims.size(), remainingTicks, elapsedTicks, record.lucky,
+                record.iconIdentifier, record.cardColor, claims, record.status);
     }
 
     public static RedEnvelopeSnapshot decode(RegistryFriendlyByteBuf buf) {
@@ -60,7 +67,7 @@ public record RedEnvelopeSnapshot(
         int remainingTicks = buf.readVarInt();
         int elapsedTicks = buf.readVarInt();
         boolean lucky = buf.readBoolean();
-        String iconItemId = buf.readUtf(128);
+        Identifier iconIdentifier = Identifier.STREAM_CODEC.decode(buf);
         int cardColor = buf.readInt();
         int claimCount = buf.readVarInt();
         List<ClaimSnapshot> claims = new ArrayList<>(claimCount);
@@ -68,9 +75,9 @@ public record RedEnvelopeSnapshot(
             claims.add(ClaimSnapshot.decode(buf));
         }
         RedEnvelopeStatus status = RedEnvelopeStatus.STREAM_CODEC.decode(buf);
-        return new RedEnvelopeSnapshot(id, title, sign, senderName, exclusiveUser, usePassword, password, hidden, viewerClaimed,
-                remainingAmount, totalAmount, playerCount, claimedCount, remainingTicks, elapsedTicks, lucky,
-                iconItemId.isBlank() ? DEFAULT_ICON_ITEM_ID : iconItemId, cardColor, List.copyOf(claims), status);
+        return new RedEnvelopeSnapshot(id, title, sign, senderName, exclusiveUser, usePassword, password, hidden,
+                viewerClaimed, remainingAmount, totalAmount, playerCount, claimedCount, remainingTicks, elapsedTicks,
+                lucky, iconIdentifier, cardColor, claims, status);
     }
 
     public void encode(RegistryFriendlyByteBuf buf) {
@@ -90,7 +97,7 @@ public record RedEnvelopeSnapshot(
         buf.writeVarInt(this.remainingTicks);
         buf.writeVarInt(this.elapsedTicks);
         buf.writeBoolean(this.lucky);
-        buf.writeUtf(this.iconItemId == null || this.iconItemId.isBlank() ? DEFAULT_ICON_ITEM_ID : this.iconItemId, 128);
+        Identifier.STREAM_CODEC.encode(buf, this.iconIdentifier);
         buf.writeInt(this.cardColor);
         buf.writeVarInt(this.claims.size());
         for (ClaimSnapshot claim : this.claims) {
@@ -98,5 +105,4 @@ public record RedEnvelopeSnapshot(
         }
         RedEnvelopeStatus.STREAM_CODEC.encode(buf, this.status);
     }
-
 }

@@ -11,11 +11,10 @@ import com.sqzj.vw50.misc.GuiMessageExtraData;
 import com.sqzj.vw50.server.network.ClaimSnapshot;
 import com.sqzj.vw50.server.network.RedEnvelopeSnapshot;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.gui.ActiveTextCollector;
-import net.minecraft.client.gui.TextAlignment;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.ActiveTextCollector;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.TextAlignment;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.gui.components.WidgetSprites;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -27,11 +26,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.ARGB;
-import net.minecraft.world.entity.player.PlayerSkin;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.PlayerSkin;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.nio.charset.StandardCharsets;
@@ -46,7 +42,6 @@ import java.util.regex.Pattern;
 public class HookChatComponent {
 
     public static final WidgetSprites PLUS_ONE_SPRITES = new WidgetSprites(VW50.prefix("plus_one_default"), VW50.prefix("plus_one"));
-    public static final Identifier RED_ENV_COMPONENT_LOCATION = VW50.prefix("textures/item/empty_red_envelope.png");
     public static ChatComponent.ChatGraphicsAccess chatGraphicsAccess = null;
 
     private static final int RED_ENV_LEFT = 4;
@@ -161,13 +156,11 @@ public class HookChatComponent {
         graphics.fill(left, top, left + width, top + 1, border);
         graphics.fill(left, top + height - 1, left + width, top + height, border);
         int iconY = top + Math.max(8, (height - 16) / 2);
-        ItemStack iconStack = getIconStack(snapshot);
-        if (!iconStack.isEmpty()) {
-            graphics.fakeItem(iconStack, left + 8, iconY);
-        } else {
-            graphics.blit(RenderPipelines.GUI_TEXTURED, RED_ENV_COMPONENT_LOCATION, left + 8, iconY, 0.0F, 0.0F, 16, 16, 16, 16, alphaWhite);
-        }
-
+        Identifier iconIdentifier = snapshot == null
+                ? RedEnvelopeSnapshot.DEFAULT_ICON_IDENTIFIER
+                : snapshot.iconIdentifier();
+        graphics.blit(RenderPipelines.GUI_TEXTURED, iconIdentifier, left + 8, iconY,
+                0.0F, 0.0F, 16, 16, 16, 16, alphaWhite);
         int textLeft = left + CARD_TEXT_LEFT_OFFSET;
         int textWidth = Math.max(20, width - CARD_TEXT_LEFT_OFFSET - CARD_RIGHT_PADDING);
         int y = top + CARD_VERTICAL_PADDING;
@@ -342,33 +335,6 @@ public class HookChatComponent {
         }
         if (!snapshot.exclusiveUser().isBlank()) return Component.translatable("red_envelope.chat.exclusive_value", snapshot.exclusiveUser()).getString();
         return Component.translatable("red_envelope.chat.click", snapshot.claimedCount(), snapshot.playerCount()).getString();
-    }
-
-
-    public static ItemStack getIconStack(RedEnvelopeSnapshot snapshot) {
-        String rawId = snapshot == null ? RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID : snapshot.iconItemId();
-        Identifier id = Identifier.tryParse(rawId == null || rawId.isBlank() ? RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID : rawId);
-        if (id == null) return ItemStack.EMPTY;
-        Item item = BuiltInRegistries.ITEM.getValue(id);
-        if (item == Items.AIR) return ItemStack.EMPTY;
-        return new ItemStack(item);
-    }
-
-    public static int parseColorOrDefault(String value, int fallback) {
-        if (value == null || value.isBlank()) return fallback;
-        String raw = value.trim();
-        if (raw.startsWith("#")) raw = raw.substring(1);
-        if (raw.startsWith("0x") || raw.startsWith("0X")) raw = raw.substring(2);
-        try {
-            int rgb = (int)Long.parseLong(raw, 16);
-            return (rgb & 0xFF000000) == 0 ? 0xFF000000 | (rgb & 0x00FFFFFF) : rgb;
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
-    }
-
-    public static String colorToHex(int color) {
-        return String.format("#%06X", color & 0x00FFFFFF);
     }
 
     private static int darken(int argb, int amount) {

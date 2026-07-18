@@ -5,15 +5,12 @@ import com.sqzj.vw50.common.registry.VWItems;
 import com.sqzj.vw50.server.network.*;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.transfer.item.ItemResource;
 
@@ -97,12 +94,29 @@ public class RedEnvelopeService {
         String password = payload.propertyType() == SendRedEnvelopePayload.PropertyType.PASSWORD ? payload.propertyValue().trim() : "";
         String exclusive = payload.propertyType() == SendRedEnvelopePayload.PropertyType.EXCLUSIVE ? payload.propertyValue().trim() : "";
         List<String> visible = exclusive.isBlank() ? List.of() : List.of(exclusive);
-        RedEnvelopeRecord record = new RedEnvelopeRecord(player.getUUID(), player.getGameProfile().name(), title, "", stack,
-                normalizeIconItemId(payload.iconItemId()), normalizeCardColor(payload.cardColor()), stack.getCount(),
+        RedEnvelopeRecord record = new RedEnvelopeRecord(
+                player.getUUID(),
+                player.getGameProfile().name(),
+                title,
+                "",
+                stack,
+                normalizeIconIdentifier(payload.iconIdentifier()),
+                normalizeCardColor(payload.cardColor()),
+                stack.getCount(),
                 payload.propertyType() == SendRedEnvelopePayload.PropertyType.EXCLUSIVE ? 1 : payload.playerCount(),
-                payload.lucky(), payload.returnWhenExpired(), !password.isBlank(), password, exclusive,
-                false, visible, gameTime, systemEnvelope);
-        if (!systemEnvelope) getData(server).addEnvelope(record);
+                payload.lucky(),
+                payload.returnWhenExpired(),
+                !password.isBlank(),
+                password,
+                exclusive,
+                false,
+                visible,
+                gameTime,
+                systemEnvelope);
+        if (!systemEnvelope) {
+            getData(server).addEnvelope(record);
+        }
+
         LAST_SEND_GAME_TIME.put(player.getUUID(), gameTime);
         broadcastEnvelope(server, record);
         player.sendSystemMessage(Component.translatable("red_envelope.sent", record.title).withStyle(ChatFormatting.GOLD), true);
@@ -127,7 +141,6 @@ public class RedEnvelopeService {
             }
         }
 
-        if (resolveItem(normalizeIconItemId(payload.iconItemId())) == Items.AIR) return Validation.fail("red_envelope.error.bad_icon");
         return Validation.OK;
     }
 
@@ -220,7 +233,10 @@ public class RedEnvelopeService {
     private static int calculateAmount(RedEnvelopeRecord record) {
         int remainingClaims = Math.max(1, record.remainingClaims());
         if (remainingClaims == 1) return Math.max(1, record.remainingAmount);
-        if (!record.lucky) return Math.max(1, record.remainingAmount / remainingClaims);
+        if (!record.lucky) {
+            return Math.max(1, record.remainingAmount / remainingClaims);
+        }
+
         int max = Math.max(1, (record.remainingAmount / remainingClaims) * 2);
         max = Math.min(max, record.remainingAmount - (remainingClaims - 1));
         return 1 + RANDOM.nextInt(Math.max(1, max));
@@ -282,7 +298,10 @@ public class RedEnvelopeService {
         MinecraftServer server = player.server;
         long gameTime = server.overworld().getGameTime();
         for (RedEnvelopeRecord record : getData(server).envelopes) {
-            if (record.isActive(gameTime) && record.usePassword && record.password.equals(rawText) && record.isVisibleTo(player.getGameProfile().name())) {
+            if (record.isActive(gameTime)
+                    && record.usePassword
+                    && record.password.equals(rawText)
+                    && record.isVisibleTo(player.getGameProfile().name())) {
                 queueClaim(player, record.id, true);
                 return;
             }
@@ -314,15 +333,8 @@ public class RedEnvelopeService {
         executor.sendSystemMessage(Component.translatable("red_envelope.permission.updated", target.getGameProfile().name()));
     }
 
-    public static Item resolveItem(String rawId) {
-        Identifier id = Identifier.tryParse(rawId == null || rawId.isBlank() ? RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID : rawId);
-        if (id == null) return Items.AIR;
-        return BuiltInRegistries.ITEM.getValue(id);
-    }
-
-    public static String normalizeIconItemId(String rawId) {
-        String id = rawId == null || rawId.isBlank() ? RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID : rawId.trim();
-        return Identifier.tryParse(id) == null ? RedEnvelopeSnapshot.DEFAULT_ICON_ITEM_ID : id;
+    public static Identifier normalizeIconIdentifier(Identifier identifier) {
+        return RedEnvelopeStyleOptions.normalizeIconIdentifier(identifier);
     }
 
     public static int normalizeCardColor(int color) {
@@ -339,6 +351,6 @@ public class RedEnvelopeService {
         private static Validation fail(String translationKey) { return new Validation(false, translationKey); }
     }
 
-    private record QueuedClaim(UUID playerUuid, UUID envelopeId, boolean fromPassword, long enqueueGameTime) { }
-
+    private record QueuedClaim(UUID playerUuid, UUID envelopeId, boolean fromPassword, long enqueueGameTime) {
+    }
 }

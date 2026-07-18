@@ -4,35 +4,28 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.datafixers.util.Pair;
 import com.sqzj.vw50.VW50;
 import com.sqzj.vw50.client.menu.SendRedEnvelopeMenu;
+import com.sqzj.vw50.common.envelope.RedEnvelopeStyleOptions;
 import com.sqzj.vw50.client.widget.UniversalCheckbox;
 import com.sqzj.vw50.server.network.SendRedEnvelopePayload;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.CycleButton;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.ImageButton;
-import net.minecraft.client.gui.components.WidgetSprites;
+import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.renderer.RenderPipelines;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import org.jspecify.annotations.NonNull;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 
 public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelopeMenu> {
 
@@ -97,6 +90,7 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
     private static final int ICON_POPUP_W = 94;
     private static final int ICON_POPUP_H = 55;
 
+    private RedEnvelopeStyleCatalog styleCatalog;
     private EditBox titleBox;
     private EditBox numberBox;
     private EditBox nameBox;
@@ -122,6 +116,8 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         int x = this.leftPos;
         int y = this.topPos;
         Pair<Identifier, Identifier> sprites = Pair.of(CHECKBOX_CHECKED, CHECKBOX_UNCHECKED);
+        this.styleCatalog = new RedEnvelopeStyleCatalog(this.minecraft.getResourceManager());
+        this.selectedIconIndex = Math.clamp(this.selectedIconIndex, 0, this.styleCatalog.iconIdentifiers().size() - 1);
         this.titleBox = new EditBox(this.font, x + 49, y + 13, 110, 16, Component.empty());
         this.numberBox = new EditBox(this.font, x + 120, y + 33, 29, 16, Component.empty());
         this.nameBox = new EditBox(this.font, x + 120, y + 51, 61, 15, Component.empty());
@@ -153,8 +149,8 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         graphics.text(this.font, LUCKY_MONEY, luckyTextX, LUCKY_Y + 4, -1);
         graphics.text(this.font, DESTROY_ON_EXPIRED, returnTextX, RETURN_Y + 4, -1);
         graphics.text(this.font, SEND, SEND_X + (SEND_W - this.font.width(SEND)) / 2, SEND_Y + 5, -1);
-        graphics.text(this.font, ICON, -24, 71, -1);
-        graphics.text(this.font, COLOR, -24, 88, -1);
+        graphics.text(this.font, COLOR, 25, 78, -1);
+        graphics.text(this.font, ICON, 73, 78, -1);
         this.renderSelectors(graphics);
         this.renderPreview(graphics);
         this.renderNameSuggestions(graphics);
@@ -178,20 +174,11 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
             graphics.setTooltipForNextFrame(this.font, PLAYER_MORE_THAN_ITEMS, mouseX, mouseY);
         }
 
-        if (this.isInsideScreen(mouseX, mouseY, PREVIEW_X, PREVIEW_Y, PREVIEW_W, PREVIEW_H)) {
-            graphics.setTooltipForNextFrame(this.font, this.previewTooltip(), Optional.empty(), mouseX, mouseY);
-        } else if (this.isInsideScreen(mouseX, mouseY, COLOR_SELECTOR_X, COLOR_SELECTOR_Y, SELECTOR_SIZE, SELECTOR_SIZE)) {
-            graphics.setTooltipForNextFrame(this.font, Component.translatable("red_envelope.selector.color", colorHex(selectedCardColor())), mouseX, mouseY);
-        } else if (this.isInsideScreen(mouseX, mouseY, ICON_SELECTOR_X, ICON_SELECTOR_Y, SELECTOR_SIZE, SELECTOR_SIZE)) {
-            graphics.setTooltipForNextFrame(this.font, Component.translatable("red_envelope.selector.icon", selectedIconStack().getHoverName()), mouseX, mouseY);
-        } else if (this.iconPopupOpen) {
+        if (this.iconPopupOpen) {
             int hovered = this.hoveredIconIndex(mouseX, mouseY);
             if (hovered >= 0) {
-                ItemStack stack = this.iconStack(hovered);
-                List<Component> tooltip = new ArrayList<>();
-                tooltip.add(stack.getHoverName());
-                tooltip.add(Component.literal(RedEnvelopeStyleCatalog.ICON_ITEM_IDS.get(hovered)).withStyle(ChatFormatting.DARK_GRAY));
-                graphics.setTooltipForNextFrame(this.font, tooltip, Optional.empty(), mouseX, mouseY);
+                Identifier identifier = this.styleCatalog.iconIdentifier(hovered);
+                graphics.setTooltipForNextFrame(this.font, Component.literal(identifier.toString()).withStyle(ChatFormatting.DARK_GRAY), mouseX, mouseY);
             }
         }
     }
@@ -217,7 +204,7 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         if (this.isInsideScreen(mouseX, mouseY, ICON_SELECTOR_X, ICON_SELECTOR_Y, SELECTOR_SIZE, SELECTOR_SIZE)) {
             this.iconPopupOpen = !this.iconPopupOpen;
             this.colorPopupOpen = false;
-            this.iconPage = this.selectedIconIndex / RedEnvelopeStyleCatalog.ICONS_PER_PAGE;
+            this.iconPage = this.selectedIconIndex / RedEnvelopeStyleOptions.ICONS_PER_PAGE;
             return true;
         }
 
@@ -249,22 +236,18 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
                 COLOR_SELECTOR_X + SELECTOR_SIZE - 2, COLOR_SELECTOR_Y + SELECTOR_SIZE - 2, color);
         if ((color & 0x00FFFFFF) == 0x00FFFFFF) {
             this.drawOutline(graphics, COLOR_SELECTOR_X + 2, COLOR_SELECTOR_Y + 2,
-                    COLOR_SELECTOR_X + SELECTOR_SIZE - 2,
-                    COLOR_SELECTOR_Y + SELECTOR_SIZE - 2, 0xFF777777);
+                    COLOR_SELECTOR_X + SELECTOR_SIZE - 2, COLOR_SELECTOR_Y + SELECTOR_SIZE - 2, 0xFF777777);
         }
 
-        ItemStack icon = selectedIconStack();
-        if (!icon.isEmpty()) {
-            graphics.fakeItem(icon, ICON_SELECTOR_X + 2, ICON_SELECTOR_Y + 2);
-        }
+        this.renderIcon(graphics, this.selectedIconIdentifier(), ICON_SELECTOR_X + 2, ICON_SELECTOR_Y + 2, RedEnvelopeStyleOptions.ICON_TEXTURE_SIZE);
     }
 
     private void renderPreview(GuiGraphicsExtractor graphics) {
         int color = this.selectedCardColor();
         graphics.fill(PREVIEW_X, PREVIEW_Y, PREVIEW_X + PREVIEW_W, PREVIEW_Y + PREVIEW_H, color);
-        graphics.fill(PREVIEW_X + 2, PREVIEW_Y + 2, PREVIEW_X + PREVIEW_W - 2, PREVIEW_Y + PREVIEW_H - 2, darken(color, 36));
-        ItemStack icon = this.selectedIconStack();
-        if (!icon.isEmpty()) graphics.fakeItem(icon, PREVIEW_X + 8, PREVIEW_Y + 9);
+        graphics.fill(PREVIEW_X + 2, PREVIEW_Y + 2, PREVIEW_X + PREVIEW_W - 2, PREVIEW_Y + PREVIEW_H - 2, this.darken(color, 36));
+        this.renderIcon(graphics, this.selectedIconIdentifier(), PREVIEW_X + 8, PREVIEW_Y + 9,
+                RedEnvelopeStyleOptions.ICON_TEXTURE_SIZE);
         String title = this.ellipsize(this.titleBox.getValue().isBlank()
                 ? Component.translatable("red_envelope.default_title").getString()
                 : this.titleBox.getValue(), 108);
@@ -296,8 +279,8 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
 
     private void renderPopups(GuiGraphicsExtractor graphics) {
         if (this.colorPopupOpen) {
-            int x = colorPopupX();
-            int y = popupY();
+            int x = this.colorPopupX();
+            int y = this.popupY();
             graphics.blit(RenderPipelines.GUI_TEXTURED, COLOR_POPUP,
                     x, y, 0.0F, 0.0F, COLOR_POPUP_W,
                     COLOR_POPUP_H, COLOR_POPUP_W, COLOR_POPUP_H);
@@ -311,17 +294,15 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         if (this.iconPopupOpen) {
             int x = this.iconPopupX();
             int y = this.popupY();
-            graphics.blit(RenderPipelines.GUI_TEXTURED, ICON_POPUP,
-                    x, y, 0.0F, 0.0F, ICON_POPUP_W,
-                    ICON_POPUP_H, ICON_POPUP_W, ICON_POPUP_H);
-            int start = this.iconPage * RedEnvelopeStyleCatalog.ICONS_PER_PAGE;
-            for (int slot = 0; slot < RedEnvelopeStyleCatalog.ICONS_PER_PAGE; slot++) {
+            graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, ICON_POPUP,
+                    x, y, 0.0F, 0.0F, ICON_POPUP_W, ICON_POPUP_H, ICON_POPUP_W, ICON_POPUP_H);
+            int start = this.iconPage * RedEnvelopeStyleOptions.ICONS_PER_PAGE;
+            for (int slot = 0; slot < RedEnvelopeStyleOptions.ICONS_PER_PAGE; slot++) {
                 int index = start + slot;
-                if (index >= RedEnvelopeStyleCatalog.ICON_ITEM_IDS.size()) break;
+                if (index >= this.styleCatalog.iconIdentifiers().size()) break;
                 int slotX = x + 14 + (slot % 3) * 23;
                 int slotY = y + 8 + (slot / 3) * 23;
-                ItemStack stack = iconStack(index);
-                if (!stack.isEmpty()) graphics.fakeItem(stack, slotX + 2, slotY + 2);
+                this.renderIcon(graphics, this.styleCatalog.iconIdentifier(index), slotX + 2, slotY + 2, RedEnvelopeStyleOptions.ICON_TEXTURE_SIZE);
                 if (index == this.selectedIconIndex) {
                     this.drawOutline(graphics, slotX, slotY, slotX + 20, slotY + 20, 0xFFFFE08A);
                 }
@@ -333,7 +314,7 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         if (!this.colorPopupOpen) return false;
         int x = this.leftPos + this.colorPopupX();
         int y = this.topPos + this.popupY();
-        for (int i = 0; i < RedEnvelopeStyleCatalog.CARD_COLORS.size(); i++) {
+        for (int i = 0; i < this.styleCatalog.cardColors().size(); i++) {
             int col = i % 4;
             int row = i / 4;
             int sx = x + 4 + col * 12;
@@ -352,21 +333,20 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         if (!this.iconPopupOpen) return false;
         int x = this.leftPos + this.iconPopupX();
         int y = this.topPos + this.popupY();
-
         if (this.isInside(mouseX, mouseY, x, y + 18, 14, 20)) {
-            this.iconPage = Math.floorMod(this.iconPage - 1, RedEnvelopeStyleCatalog.iconPageCount());
+            this.iconPage = Math.floorMod(this.iconPage - 1, this.styleCatalog.iconPageCount());
             return true;
         }
 
         if (this.isInside(mouseX, mouseY, x + 80, y + 18, 14, 20)) {
-            this.iconPage = (this.iconPage + 1) % RedEnvelopeStyleCatalog.iconPageCount();
+            this.iconPage = (this.iconPage + 1) % this.styleCatalog.iconPageCount();
             return true;
         }
 
-        int start = this.iconPage * RedEnvelopeStyleCatalog.ICONS_PER_PAGE;
-        for (int slot = 0; slot < RedEnvelopeStyleCatalog.ICONS_PER_PAGE; slot++) {
+        int start = this.iconPage * RedEnvelopeStyleOptions.ICONS_PER_PAGE;
+        for (int slot = 0; slot < RedEnvelopeStyleOptions.ICONS_PER_PAGE; slot++) {
             int index = start + slot;
-            if (index >= RedEnvelopeStyleCatalog.ICON_ITEM_IDS.size()) break;
+            if (index >= this.styleCatalog.iconIdentifiers().size()) break;
             int sx = x + 14 + (slot % 3) * 23;
             int sy = y + 8 + (slot / 3) * 23;
             if (this.isInside(mouseX, mouseY, sx, sy, 20, 20)) {
@@ -382,10 +362,10 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
     private int hoveredIconIndex(int mouseX, int mouseY) {
         int x = this.leftPos + this.iconPopupX();
         int y = this.topPos + this.popupY();
-        int start = this.iconPage * RedEnvelopeStyleCatalog.ICONS_PER_PAGE;
-        for (int slot = 0; slot < RedEnvelopeStyleCatalog.ICONS_PER_PAGE; slot++) {
+        int start = this.iconPage * RedEnvelopeStyleOptions.ICONS_PER_PAGE;
+        for (int slot = 0; slot < RedEnvelopeStyleOptions.ICONS_PER_PAGE; slot++) {
             int index = start + slot;
-            if (index >= RedEnvelopeStyleCatalog.ICON_ITEM_IDS.size()) break;
+            if (index >= this.styleCatalog.iconIdentifiers().size()) break;
             int sx = x + 14 + (slot % 3) * 23;
             int sy = y + 8 + (slot / 3) * 23;
             if (this.isInside(mouseX, mouseY, sx, sy, 20, 20)) return index;
@@ -408,15 +388,17 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
             lines.add(Component.translatable("red_envelope.chat.exclusive_value", this.nameBox.getValue()).withStyle(ChatFormatting.YELLOW));
         }
 
-        lines.add(Component.translatable("red_envelope.preview.style", selectedIconId(), colorHex(selectedCardColor())).withStyle(ChatFormatting.GRAY));
+        lines.add(Component.translatable("red_envelope.preview.style", this.selectedIconIdentifier(), this.colorHex(this.selectedCardColor())).withStyle(ChatFormatting.GRAY));
         return lines;
     }
 
     private List<String> matchingOnlineNames() {
         if (this.minecraft.getConnection() == null) return List.of();
         String filter = this.nameBox.getValue().toLowerCase(Locale.ROOT);
-        return this.minecraft.getConnection().getListedOnlinePlayers().stream().map(PlayerInfo::getProfile).map(GameProfile::name)
-                .filter(name -> filter.isBlank() || name.toLowerCase(Locale.ROOT).contains(filter)).limit(5).toList();
+        return this.minecraft.getConnection().getListedOnlinePlayers().stream()
+                .map(PlayerInfo::getProfile).map(GameProfile::name)
+                .filter(name -> filter.isBlank() || name.toLowerCase(Locale.ROOT).contains(filter))
+                .limit(5).toList();
     }
 
     private void updateUIForType() {
@@ -491,35 +473,24 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         };
 
         ClientPacketDistributor.sendToServer(new SendRedEnvelopePayload(
-                title,
-                playerCount,
-                this.isLuckyMoney,
-                this.returnWhenExpired,
-                type,
-                propertyValue,
-                this.selectedIconId(),
-                this.selectedCardColor()));
+                title, playerCount, this.isLuckyMoney, this.returnWhenExpired, type,
+                propertyValue, this.selectedIconIdentifier(), this.selectedCardColor()));
     }
 
     private int selectedCardColor() {
-        return RedEnvelopeStyleCatalog.CARD_COLORS.get(Math.clamp(this.selectedColorIndex, 0, RedEnvelopeStyleCatalog.CARD_COLORS.size() - 1));
+        int safeIndex = Math.clamp(this.selectedColorIndex, 0, this.styleCatalog.cardColors().size() - 1);
+        return this.styleCatalog.cardColors().get(safeIndex);
     }
 
-    private String selectedIconId() {
-        return RedEnvelopeStyleCatalog.ICON_ITEM_IDS.get(Math.clamp(this.selectedIconIndex, 0, RedEnvelopeStyleCatalog.ICON_ITEM_IDS.size() - 1));
+    private Identifier selectedIconIdentifier() {
+        return this.styleCatalog.iconIdentifier(this.selectedIconIndex);
     }
 
-    private ItemStack selectedIconStack() {
-        return this.iconStack(this.selectedIconIndex);
-    }
-
-    private ItemStack iconStack(int index) {
-        if (index < 0 || index >= RedEnvelopeStyleCatalog.ICON_ITEM_IDS.size()) return ItemStack.EMPTY;
-        Identifier id = Identifier.tryParse(RedEnvelopeStyleCatalog.ICON_ITEM_IDS.get(index));
-        if (id == null) return ItemStack.EMPTY;
-        Item item = BuiltInRegistries.ITEM.getValue(id);
-        if (item == Items.AIR) return ItemStack.EMPTY;
-        return new ItemStack(item);
+    private void renderIcon(GuiGraphicsExtractor graphics, Identifier identifier, int x, int y, int size) {
+        graphics.blit(RenderPipelines.GUI_TEXTURED, identifier,
+                x, y, 0.0F, 0.0F, size, size,
+                RedEnvelopeStyleOptions.ICON_TEXTURE_SIZE,
+                RedEnvelopeStyleOptions.ICON_TEXTURE_SIZE);
     }
 
     private int colorPopupX() {
@@ -540,7 +511,6 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
         while (!text.isEmpty() && this.font.width(text + suffix) > width) {
             text = text.substring(0, text.length() - 1);
         }
-
         return text + suffix;
     }
 
@@ -556,7 +526,7 @@ public class RedEnvelopeEditScreen extends AbstractContainerScreen<SendRedEnvelo
     }
 
     private boolean isInsideScreen(int mouseX, int mouseY, int x, int y, int width, int height) {
-        return isInside(mouseX, mouseY, this.leftPos + x, this.topPos + y, width, height);
+        return this.isInside(mouseX, mouseY, this.leftPos + x, this.topPos + y, width, height);
     }
 
     private boolean isInside(int mouseX, int mouseY, int x, int y, int width, int height) {
