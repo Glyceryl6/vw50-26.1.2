@@ -35,6 +35,7 @@ public class VWLanguageProvider extends LanguageProvider {
     @Override
     protected void addTranslations() {
         this.addKey(VWItems.EMPTY_RED_PACKET, "红包");
+        this.addKey(VWItems.YUANBAO, "元宝");
     }
 
     @Override

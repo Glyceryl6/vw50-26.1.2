@@ -15,6 +15,7 @@ public class VWItems {
 
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(VW50.MOD_ID);
     public static final DeferredHolder<Item, ? extends Item> EMPTY_RED_PACKET = register("empty_red_envelope", EmptyRedEnvelope::new);
+    public static final DeferredHolder<Item, ? extends Item> YUANBAO = register("yuanbao", Item::new);
 
     public static DeferredHolder<Item, ? extends Item> register(
             String name, Function<Item.Properties, Item> itemFactory) {
