@@ -17,6 +17,7 @@ public class VWItemModelProvider extends ModelProvider {
     @Override
     protected void registerModels(BlockModelGenerators blockModels, ItemModelGenerators itemModels) {
         itemModels.generateFlatItem(VWItems.EMPTY_RED_PACKET.get(), ModelTemplates.FLAT_ITEM);
+        itemModels.generateFlatItem(VWItems.YUANBAO.get(), ModelTemplates.FLAT_ITEM);
     }
 
 }

@@ -1,6 +1,7 @@
 {
   "item.vw50.empty_red_envelope": "红包",
   "item.vw50.empty_red_envelope.tooltips": "老板大气！",
+  "item.vw50.yuanbao": "元宝",
   "itemGroup.vw50": "V我50",
   "red_envelope.chat.card_exclusive": "专属红包",
   "red_envelope.chat.card_password": "口令红包",
