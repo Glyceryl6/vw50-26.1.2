@@ -29,7 +29,6 @@ public final class ClientRedEnvelopeManager {
     private static final Set<UUID> FINISH_NOTICES = new HashSet<>();
     @Nullable
     private static UUID selectedClaimListId = null;
-    private static boolean mouseOverClaimPanelClose = false;
 
     public static void handleSync(RedEnvelopeSyncPayload payload, IPayloadContext context) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -72,14 +71,6 @@ public final class ClientRedEnvelopeManager {
 
     public static void closeClaimList() {
         selectedClaimListId = null;
-    }
-
-    public static boolean isMouseOverClaimPanelClose() {
-        return mouseOverClaimPanelClose;
-    }
-
-    public static void setMouseOverClaimPanelClose(boolean value) {
-        mouseOverClaimPanelClose = value;
     }
 
     public static List<ClaimSnapshot> getLuckiestClaims(RedEnvelopeSnapshot snapshot) {
